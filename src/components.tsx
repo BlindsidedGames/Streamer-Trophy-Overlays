@@ -53,6 +53,32 @@ const createPlaceholderGradeValues = () =>
     gradeOrder.map((grade) => [grade, "--"]),
   ) as Record<GradeKey, string>;
 
+const fullWidthAnchorShellStyle = {
+  width: "100%",
+  maxWidth: "100%",
+  minWidth: 0,
+} satisfies CSSProperties;
+
+const intrinsicWidthShellStyle = {
+  width: "fit-content",
+  maxWidth: "100%",
+  minWidth: 0,
+} satisfies CSSProperties;
+
+const singleLineClampStyle = {
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+} satisfies CSSProperties;
+
+const multiLineClampStyle = {
+  overflow: "hidden",
+  display: "-webkit-box",
+  WebkitBoxOrient: "vertical",
+  WebkitLineClamp: 2,
+} satisfies CSSProperties;
+
 export type OverlayStripViewModel = {
   mode: "overall" | "currentGame";
   title: string;
@@ -76,17 +102,6 @@ export type TargetTrophyCardVariant =
   | "loop"
   | "compact"
   | "standalone";
-
-type OverlayPreviewViewport = {
-  width: number;
-  height: number;
-};
-
-type OverlayPreviewMetricsMessage = {
-  type: typeof OVERLAY_PREVIEW_METRICS_MESSAGE_TYPE;
-  width: number;
-  height: number;
-};
 
 type OverlayStripSettings = Pick<
   OverlaySettings,
@@ -357,10 +372,10 @@ const resolveStripZoneDefinition = (
 
     return {
       key: zoneKey,
-      column: compact ? "minmax(0, 1fr)" : "auto",
+      column: "minmax(0, 1fr)",
       render: () => (
         <div className="overlay-strip-zone overlay-strip-zone-identity" key={zoneKey}>
-          <h2 title={viewModel.title}>{viewModel.title}</h2>
+          <h2 title={viewModel.title} style={singleLineClampStyle}>{viewModel.title}</h2>
           {viewModel.chipLabel ? (
             <span className="overlay-chip">{viewModel.chipLabel}</span>
           ) : (
@@ -474,10 +489,14 @@ export function TargetTrophyCard({
                 alt=""
               />
             ) : null}
-            <h2 title={viewModel.trophyName}>{viewModel.trophyName}</h2>
+            <h2 title={viewModel.trophyName} style={singleLineClampStyle}>
+              {viewModel.trophyName}
+            </h2>
           </div>
           {tagLabel ? <span className="overlay-chip target-trophy-tag">{tagLabel}</span> : null}
-          <p className="target-trophy-description">{viewModel.description}</p>
+          <p className="target-trophy-description" style={multiLineClampStyle}>
+            {viewModel.description}
+          </p>
         </div>
       </div>,
     ];
@@ -534,13 +553,6 @@ export function DashboardOverlayPreview({
   }
 
   return <div className="overlay-preview-frame">{renderOverlayCard(overlayData, mode, true, settingsOverride)}</div>;
-}
-
-function createPreviewViewport(
-  width: number,
-  height: number,
-): OverlayPreviewViewport {
-  return { width, height };
 }
 
 function OverlayPreviewStage({
@@ -648,8 +660,12 @@ export function EmbeddedOverlayPreview({
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [scale, setScale] = useState(1);
-  const [viewport, setViewport] = useState<OverlayPreviewViewport>(() =>
-    createPreviewViewport(viewportWidth, viewportHeight),
+  const fixedViewport = useMemo(
+    () => ({
+      width: viewportWidth,
+      height: viewportHeight,
+    }),
+    [viewportHeight, viewportWidth],
   );
 
   const previewSrc = useMemo(() => {
@@ -671,6 +687,13 @@ export function EmbeddedOverlayPreview({
     },
     [overlayData, settings],
   );
+  const scaledViewport = useMemo(
+    () => ({
+      width: fixedViewport.width * scale,
+      height: fixedViewport.height * scale,
+    }),
+    [fixedViewport.height, fixedViewport.width, scale],
+  );
 
   useEffect(() => {
     const wrapper = wrapperRef.current;
@@ -680,7 +703,7 @@ export function EmbeddedOverlayPreview({
 
     const updateScale = () => {
       const width = wrapper.getBoundingClientRect().width;
-      setScale(width > 0 ? Math.min(1, width / viewport.width) : 1);
+      setScale(width > 0 ? Math.min(1, width / fixedViewport.width) : 1);
     };
 
     updateScale();
@@ -693,31 +716,7 @@ export function EmbeddedOverlayPreview({
     const observer = new ResizeObserver(updateScale);
     observer.observe(wrapper);
     return () => observer.disconnect();
-  }, [viewport.width]);
-
-  useEffect(() => {
-    setViewport(createPreviewViewport(viewportWidth, viewportHeight));
-  }, [previewSrc, viewportHeight, viewportWidth]);
-
-  useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      if (event.origin && event.origin !== window.location.origin) {
-        return;
-      }
-
-      if (
-        event.source !== iframeRef.current?.contentWindow ||
-        !isOverlayPreviewMetricsMessage(event.data)
-      ) {
-        return;
-      }
-
-      setViewport(createPreviewViewport(event.data.width, event.data.height));
-    };
-
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, [previewSrc]);
+  }, [fixedViewport.width]);
 
   useEffect(() => {
     postPreviewState();
@@ -730,13 +729,21 @@ export function EmbeddedOverlayPreview({
       style={
         {
           "--overlay-preview-scale": `${scale}`,
-          "--overlay-preview-viewport-width": `${viewport.width}px`,
-          "--overlay-preview-viewport-height": `${viewport.height}px`,
-          height: `${viewport.height * scale}px`,
+          "--overlay-preview-viewport-width": `${fixedViewport.width}px`,
+          "--overlay-preview-viewport-height": `${fixedViewport.height}px`,
+          height: `${scaledViewport.height}px`,
         } as CSSProperties
       }
     >
-      <div className="embedded-overlay-preview-canvas">
+      <div
+        className="embedded-overlay-preview-canvas"
+        style={
+          {
+            width: `${scaledViewport.width}px`,
+            height: `${scaledViewport.height}px`,
+          } as CSSProperties
+        }
+      >
         <iframe
           ref={iframeRef}
           title={title}
@@ -770,25 +777,6 @@ const isOverlayPreviewMessage = (value: unknown): value is OverlayPreviewMessage
     candidate.overlayData !== null &&
     typeof candidate.settings === "object" &&
     candidate.settings !== null
-  );
-};
-
-const isOverlayPreviewMetricsMessage = (
-  value: unknown,
-): value is OverlayPreviewMetricsMessage => {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-
-  const candidate = value as Partial<OverlayPreviewMetricsMessage>;
-  return (
-    candidate.type === OVERLAY_PREVIEW_METRICS_MESSAGE_TYPE &&
-    typeof candidate.width === "number" &&
-    Number.isFinite(candidate.width) &&
-    candidate.width > 0 &&
-    typeof candidate.height === "number" &&
-    Number.isFinite(candidate.height) &&
-    candidate.height > 0
   );
 };
 
@@ -833,6 +821,24 @@ const resolveOverlaySceneClassName = ({
   `overlay-scene ${resolveOverlayAnchorClassName(anchor)}${
     previewEnabled ? " overlay-scene-preview" : ""
   }`;
+
+function OverlayAnchorShell({
+  anchor,
+  children,
+}: {
+  anchor: OverlayAnchor;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className="overlay-anchor-shell"
+      data-overlay-horizontal-anchor={resolveOverlayHorizontalAnchor(anchor)}
+      style={fullWidthAnchorShellStyle}
+    >
+      {children}
+    </div>
+  );
+}
 
 function useOverlayRouteData(intervalMs = 5000) {
   const previewEnabled = isDashboardPreviewMode();
@@ -1071,41 +1077,43 @@ export function LoopOverlayView({
 
   const loopShellStyle =
     resolvedLoopWidth != null
-      ? ({ width: `${resolvedLoopWidth}px` } satisfies CSSProperties)
+      ? ({ width: "100%", maxWidth: `${resolvedLoopWidth}px` } satisfies CSSProperties)
       : undefined;
 
   const content = (
     <>
-      <div
-        className="overlay-strip-shell"
-        data-loop-shell-width={resolvedLoopWidth ?? undefined}
-        data-overlay-horizontal-anchor={horizontalAnchor}
-        style={loopShellStyle}
-      >
+      <OverlayAnchorShell anchor={displayData.display.settings.overlayAnchor}>
         <div
-          className="overlay-strip-content-stack"
+          className="overlay-strip-shell"
+          data-loop-shell-width={resolvedLoopWidth ?? undefined}
+          data-overlay-horizontal-anchor={horizontalAnchor}
           style={loopShellStyle}
         >
           <div
-            ref={currentLayerRef}
-            className={`overlay-strip-content-layer overlay-strip-content-layer-current overlay-strip-content-layer-${currentView} ${
-              isTransitioning ? "is-transitioning" : ""
-            } ${transitionEntered ? "is-entered" : ""}`}
+            className="overlay-strip-content-stack"
+            style={loopShellStyle}
           >
-            {renderOverlayCard(displayData, currentView)}
-          </div>
-          {previousView ? (
             <div
-              ref={previousLayerRef}
-              className={`overlay-strip-content-layer overlay-strip-content-layer-previous overlay-strip-content-layer-${previousView} ${
-                transitionEntered ? "is-exiting" : ""
-              }`}
+              ref={currentLayerRef}
+              className={`overlay-strip-content-layer overlay-strip-content-layer-current overlay-strip-content-layer-${currentView} ${
+                isTransitioning ? "is-transitioning" : ""
+              } ${transitionEntered ? "is-entered" : ""}`}
             >
-              {renderOverlayCard(displayData, previousView)}
+              {renderOverlayCard(displayData, currentView)}
             </div>
-          ) : null}
+            {previousView ? (
+              <div
+                ref={previousLayerRef}
+                className={`overlay-strip-content-layer overlay-strip-content-layer-previous overlay-strip-content-layer-${previousView} ${
+                  transitionEntered ? "is-exiting" : ""
+                }`}
+              >
+                {renderOverlayCard(displayData, previousView)}
+              </div>
+            ) : null}
+          </div>
         </div>
-      </div>
+      </OverlayAnchorShell>
       <div className="overlay-loop-measurements" aria-hidden="true">
         {measuredLoopViews.map((view) => (
         <div
@@ -1159,14 +1167,16 @@ export function OverallOverlay() {
       })}
     >
       <OverlayPreviewStage enabled={previewEnabled} reportSignal={overlayData}>
-        <div
-          className="overlay-strip-shell"
-          data-overlay-horizontal-anchor={resolveOverlayHorizontalAnchor(
-            overlayData.display.settings.overlayAnchor,
-          )}
-        >
-          {renderOverlayCard(overlayData, "overall")}
-        </div>
+        <OverlayAnchorShell anchor={overlayData.display.settings.overlayAnchor}>
+          <div
+            className="overlay-strip-shell"
+            data-overlay-horizontal-anchor={resolveOverlayHorizontalAnchor(
+              overlayData.display.settings.overlayAnchor,
+            )}
+          >
+            {renderOverlayCard(overlayData, "overall")}
+          </div>
+        </OverlayAnchorShell>
       </OverlayPreviewStage>
     </div>
   );
@@ -1188,14 +1198,16 @@ export function CurrentGameOverlay() {
       })}
     >
       <OverlayPreviewStage enabled={previewEnabled} reportSignal={overlayData}>
-        <div
-          className="overlay-strip-shell"
-          data-overlay-horizontal-anchor={resolveOverlayHorizontalAnchor(
-            overlayData.display.settings.overlayAnchor,
-          )}
-        >
-          {renderOverlayCard(overlayData, "currentGame")}
-        </div>
+        <OverlayAnchorShell anchor={overlayData.display.settings.overlayAnchor}>
+          <div
+            className="overlay-strip-shell"
+            data-overlay-horizontal-anchor={resolveOverlayHorizontalAnchor(
+              overlayData.display.settings.overlayAnchor,
+            )}
+          >
+            {renderOverlayCard(overlayData, "currentGame")}
+          </div>
+        </OverlayAnchorShell>
       </OverlayPreviewStage>
     </div>
   );
@@ -1217,19 +1229,22 @@ export function TargetTrophyOverlay() {
       })}
     >
       <OverlayPreviewStage enabled={previewEnabled} reportSignal={overlayData}>
-        <div
-          className="target-trophy-overlay-shell"
-          data-overlay-horizontal-anchor={resolveOverlayHorizontalAnchor(
-            overlayData.display.settings.overlayAnchor,
-          )}
-        >
-          <TargetTrophyCard
-            viewModel={toTargetTrophyViewModel(overlayData.targetTrophy)}
-            variant="standalone"
-            tagLabel={resolveTargetTrophyTagLabel(overlayData.display.settings)}
-            settings={overlayData.display.settings}
-          />
-        </div>
+        <OverlayAnchorShell anchor={overlayData.display.settings.overlayAnchor}>
+          <div
+            className="target-trophy-overlay-shell"
+            data-overlay-horizontal-anchor={resolveOverlayHorizontalAnchor(
+              overlayData.display.settings.overlayAnchor,
+            )}
+            style={intrinsicWidthShellStyle}
+          >
+            <TargetTrophyCard
+              viewModel={toTargetTrophyViewModel(overlayData.targetTrophy)}
+              variant="standalone"
+              tagLabel={resolveTargetTrophyTagLabel(overlayData.display.settings)}
+              settings={overlayData.display.settings}
+            />
+          </div>
+        </OverlayAnchorShell>
       </OverlayPreviewStage>
     </div>
   );

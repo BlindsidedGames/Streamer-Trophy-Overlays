@@ -622,25 +622,35 @@ dd {
 
 .overlay-scene-preview {
   width: 100%;
-  min-height: 0;
+  min-height: 100%;
+  height: 100%;
   padding: 0;
 }
 
 .overlay-preview-stage {
-  display: inline-grid;
-  width: max-content;
-  max-width: none;
-  padding: 4px;
-  justify-items: start;
-  align-items: start;
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  height: 100%;
+  padding: 0;
+  align-items: stretch;
 }
 
-.overlay-scene-preview .overlay-strip-shell,
-.overlay-scene-preview .overlay-strip,
-.overlay-scene-preview .overlay-strip-content-stack,
-.overlay-scene-preview .overlay-strip-content {
-  width: max-content;
-  max-width: none;
+.overlay-anchor-shell {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  display: grid;
+  align-items: stretch;
+}
+
+.overlay-anchor-shell[data-overlay-horizontal-anchor="left"] {
+  justify-items: start;
+}
+
+.overlay-anchor-shell[data-overlay-horizontal-anchor="right"] {
+  justify-items: end;
 }
 
 .overlay-loading {
@@ -664,8 +674,9 @@ dd {
   --strip-grade-icon-size: 34px;
   --strip-grade-text-size: 30px;
   --strip-chip-text-size: 11px;
-  width: fit-content;
-  max-width: calc(100vw - 56px);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   display: grid;
   align-items: stretch;
   justify-items: start;
@@ -677,8 +688,9 @@ dd {
 
 .overlay-strip-content-stack {
   display: grid;
-  width: fit-content;
+  width: 100%;
   max-width: 100%;
+  min-width: 0;
 }
 
 .overlay-loop-measurements {
@@ -718,6 +730,7 @@ dd {
   justify-items: start;
   align-content: start;
   width: 100%;
+  min-width: 0;
   transition:
     opacity 800ms cubic-bezier(0.22, 1, 0.36, 1),
     transform 800ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -759,8 +772,9 @@ dd {
 }
 
 .overlay-strip {
-  width: fit-content;
-  max-width: calc(100vw - 56px);
+  width: min(100%, max-content);
+  max-width: 100%;
+  min-width: 0;
   display: block;
   padding: var(--strip-padding-block) var(--strip-padding-inline);
   border-radius: var(--strip-radius);
@@ -784,8 +798,9 @@ dd {
     auto;
   align-items: center;
   gap: var(--strip-gap);
-  width: fit-content;
+  width: min(100%, max-content);
   max-width: 100%;
+  min-width: 0;
 }
 
 .overlay-strip::before {
@@ -1698,21 +1713,24 @@ dd {
 }
 
 .embedded-overlay-preview {
+  display: flex;
+  align-items: flex-start;
   width: 100%;
   min-width: 0;
   overflow: hidden;
 }
 
 .embedded-overlay-preview-canvas {
-  width: var(--overlay-preview-viewport-width);
-  height: var(--overlay-preview-viewport-height);
-  transform: scale(var(--overlay-preview-scale));
-  transform-origin: top left;
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .embedded-overlay-preview-frame {
   width: var(--overlay-preview-viewport-width);
   height: var(--overlay-preview-viewport-height);
+  transform: scale(var(--overlay-preview-scale));
+  transform-origin: top left;
   border: 0;
   display: block;
   background: transparent;
@@ -1918,7 +1936,8 @@ dd {
   display: flex;
   align-items: flex-start;
   gap: 18px;
-  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   padding: 22px;
   border-radius: 11px;
   border: 1px solid rgba(168, 197, 247, 0.22);
@@ -1937,8 +1956,9 @@ dd {
   --strip-art-size: 82px;
   --target-trophy-art-size: var(--strip-art-size);
   --target-trophy-art-radius: var(--strip-radius);
-  width: max-content;
-  max-width: none;
+  width: min(100%, max-content);
+  max-width: 100%;
+  min-width: 0;
   min-height: calc(var(--strip-art-size) + (var(--strip-padding-block) * 2));
   padding: var(--strip-padding-block) var(--strip-padding-inline);
   border-radius: var(--strip-radius);
@@ -1971,8 +1991,9 @@ dd {
   --strip-art-size: 82px;
   --target-trophy-art-size: var(--strip-art-size);
   --target-trophy-art-radius: var(--strip-radius);
-  width: fit-content;
-  max-width: calc(100vw - 56px);
+  width: min(100%, max-content);
+  max-width: 100%;
+  min-width: 0;
   gap: 14px;
   padding: var(--strip-padding-block) var(--strip-padding-inline);
   border-radius: var(--strip-radius);
@@ -2012,6 +2033,7 @@ dd {
   display: grid;
   row-gap: 10px;
   column-gap: 14px;
+  max-width: 100%;
   min-width: 0;
 }
 
@@ -2037,7 +2059,11 @@ dd {
 }
 
 .target-trophy-title-row h2 {
+  flex: 1 1 auto;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .target-trophy-copy h2 {
@@ -2051,11 +2077,11 @@ dd {
 }
 
 .target-trophy-card-standalone .target-trophy-copy {
-  max-width: none;
+  max-width: 100%;
 }
 
 .target-trophy-card-loop .target-trophy-copy {
-  max-width: none;
+  max-width: 100%;
 }
 
 .target-trophy-card-loop .target-trophy-title-row {
@@ -2066,16 +2092,8 @@ dd {
   white-space: nowrap;
 }
 
-.target-trophy-card-loop .target-trophy-description {
-  white-space: nowrap;
-}
-
 .target-trophy-card-standalone .target-trophy-title-row {
   flex-wrap: nowrap;
-}
-
-.target-trophy-card-standalone .target-trophy-copy h2 {
-  white-space: nowrap;
 }
 
 .target-trophy-tag {
@@ -2087,6 +2105,10 @@ dd {
 .target-trophy-description {
   grid-column: 2;
   color: #c4d0e7;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .target-trophy-copy-no-tag .target-trophy-description {
@@ -2141,26 +2163,9 @@ dd {
 }
 
 .target-trophy-overlay-shell {
-  width: min(100vw - 56px, 100%);
-  display: flex;
-}
-
-.target-trophy-overlay-shell[data-overlay-horizontal-anchor="left"] {
-  justify-content: flex-start;
-}
-
-.target-trophy-overlay-shell[data-overlay-horizontal-anchor="right"] {
-  justify-content: flex-end;
-}
-
-.overlay-scene-preview .target-trophy-overlay-shell {
-  width: max-content;
-  max-width: none;
-}
-
-.overlay-scene-preview .target-trophy-card-standalone {
-  width: max-content;
-  max-width: none;
+  max-width: 100%;
+  min-width: 0;
+  display: grid;
 }
 
 .collapsible-body {

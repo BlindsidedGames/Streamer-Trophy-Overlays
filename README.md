@@ -1,31 +1,55 @@
 # PSN Trophy Overlay Suite
 
-Local dashboard + OBS browser-source overlays for PlayStation trophy streaming. The app uses `psn-api` as the live source of truth for overall account stats and recent titles, then layers local SQLite-backed settings and current-game overrides on top.
+PSN Trophy Overlay Suite is a Windows desktop streamer overlay app for PlayStation trophy streams. It connects to Sony's trophy data through `psn-api`, gives you a local control room for configuring your stream presentation, and serves OBS-friendly local browser-source URLs from your machine.
 
-## Download and run on Windows
+## What the app does
 
-Install the packaged desktop build from GitHub Releases when you want the normal end-user experience:
+- loads live PlayStation trophy totals and recent-title data
+- serves four local OBS browser-source overlays for loop, overall, current-game, and target-trophy views
+- stores overlay settings and active-game overrides in a local SQLite database
+- lets you switch between PSN title data and custom current-game overrides without leaving the desktop app
 
-1. Open the latest release and download either:
-   - the Windows installer
-   - the portable `.exe`
-2. Launch **PSN Trophy Overlay Suite** from the installer or the portable executable.
-3. The desktop app starts its local backend automatically and opens its own window.
-4. Keep the app running in the tray while OBS uses these local browser-source routes:
-   - `http://127.0.0.1:4318/`
-   - `http://127.0.0.1:4318/overlay/loop`
-   - `http://127.0.0.1:4318/overlay/overall`
-   - `http://127.0.0.1:4318/overlay/current-game`
-   - `http://127.0.0.1:4318/overlay/target-trophy`
+## PSN access setup
 
-Closing the main window asks whether to minimize the app to the tray or quit it. Choosing tray mode keeps the overlay URLs live. Use the tray icon to reopen the window or quit the app fully.
+To load PlayStation data, the app needs a saved NPSSO token for your account.
 
-The packaged build stores its SQLite database and PSN token in the Electron user-data directory, typically:
+1. Sign in to your PlayStation account.
+2. Open `https://ca.account.sony.com/api/v1/ssocookie`.
+3. Copy the NPSSO token shown by Sony.
+4. Launch **PSN Trophy Overlay Suite** and open `PSN access`.
+5. Paste the token into the `PSN token` field and click `Save token`.
+
+The saved token stays on your local machine and is not read from `.env`. The app keeps the token in local storage files and does not return the saved value to the UI after it is stored.
+
+The packaged desktop build stores its SQLite database and PSN token in the Electron user-data directory, typically:
 
 - `%APPDATA%\\PSN Trophy Overlay Suite\\streamer-tools.sqlite`
 - `%APPDATA%\\PSN Trophy Overlay Suite\\psn-credentials.json`
 
-Uninstall removes the app binaries but leaves this user data in place by default.
+For source runs, the token is stored locally at `~/.streamer-tools/psn-credentials.json`.
+
+## Download the portable build
+
+GitHub Releases publish the portable Windows build here:
+
+- [Latest release](https://github.com/BlindsidedGames/Streamer-Tools/releases/latest)
+
+To run it:
+
+1. Download the latest `PSN Trophy Overlay Suite-<version>-portable.exe`.
+2. Launch the portable `.exe`; no separate installer is required.
+3. Save your NPSSO token through `PSN access`.
+4. Keep the app running while OBS uses the local browser-source routes below.
+
+After the app is running, OBS can use:
+
+- `http://127.0.0.1:4318/`
+- `http://127.0.0.1:4318/overlay/loop`
+- `http://127.0.0.1:4318/overlay/overall`
+- `http://127.0.0.1:4318/overlay/current-game`
+- `http://127.0.0.1:4318/overlay/target-trophy`
+
+Closing the main window asks whether to minimize the app to the tray or quit it. Choosing tray mode keeps the local overlay URLs live while the window is hidden.
 
 ## Run from source
 
@@ -76,28 +100,21 @@ The same local server now hosts:
 - Current-game overlay: `http://127.0.0.1:4318/overlay/current-game`
 - Target trophy overlay: `http://127.0.0.1:4318/overlay/target-trophy`
 
-### Build the Windows release locally
+### Build Windows artifacts locally
 
-To create the Windows installer and portable executable:
+To create the local Windows release artifacts:
 
 ```bash
 npm run dist:win
 ```
 
-Electron Builder writes the packaged artifacts to `release/`.
+This local packaging flow writes the installer and portable executable to `release/`. GitHub Releases publish only the portable `.exe`.
 
 ## Configuration
 
 This folder includes a local `.env` for non-secret runtime settings like `PORT`.
 
-If you ever need a fresh token, get it from:
-
-- `https://ca.account.sony.com/api/v1/ssocookie`
-
-When the app starts, paste the token into the PSN token field at the top of the Control Room and click `Save token`.
-For source runs it is stored only on the local machine at `~/.streamer-tools/psn-credentials.json` and is not read from `.env`.
-
-The server still reads:
+The server reads:
 
 - `PORT`: optional API port, defaults to `4318`
 - `APP_DB_PATH`: optional SQLite file path, defaults to `./streamer-tools.sqlite` for source runs
@@ -113,15 +130,7 @@ The server still reads:
 - Production current-game overlay: `http://127.0.0.1:4318/overlay/current-game`
 - Production target trophy overlay: `http://127.0.0.1:4318/overlay/target-trophy`
 
-## What it does
-
-- fetches overall account trophy totals and recent PSN titles
-- stores overlay settings and active-game overrides in SQLite
-- lets you pick a recent PSN title or switch to a custom current game
-- serves three OBS browser-source overlay routes
-- shows a dashboard preview that uses the same card components as the overlays
-
 ## Notes
 
-- This is the v1 local dashboard/overlay build with a Windows Electron desktop shell.
+- This is the v1 local dashboard and overlay build with a Windows Electron desktop shell.
 - The existing `trophy-panel.html`, `trophy-border.html`, and `img/` assets are left untouched as design references.

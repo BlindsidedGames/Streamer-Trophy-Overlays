@@ -5,10 +5,21 @@ import { spawn } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 
 const projectRoot = resolve(process.cwd());
+const supportedTargets = new Set(["nsis", "portable"]);
+const requestedTargets = process.argv.slice(2);
+const targets = requestedTargets.length > 0 ? requestedTargets : ["nsis", "portable"];
 const needsStage = /\s/.test(projectRoot);
 const stagingRoot = join(tmpdir(), "streamer-tools-win-build");
 const stagedProjectRoot = join(stagingRoot, "app");
 const releaseDirectoryName = "release";
+
+for (const target of targets) {
+  if (!supportedTargets.has(target)) {
+    throw new Error(
+      `Unsupported Windows packaging target "${target}". Supported targets: ${Array.from(supportedTargets).join(", ")}.`,
+    );
+  }
+}
 
 const filesToStage = [
   "package.json",
@@ -129,6 +140,7 @@ const copyReleaseArtifactsBack = async (packagingRoot) => {
   }
 
   const releaseRoot = join(projectRoot, releaseDirectoryName);
+  rmSync(releaseRoot, { recursive: true, force: true });
   mkdirSync(releaseRoot, { recursive: true });
 
   for (const entry of readdirSync(stagedReleaseRoot)) {
@@ -158,12 +170,9 @@ if (needsStage) {
 
 try {
   await runCommand("npm", ["run", "electron:install-app-deps"], packagingRoot);
+  const builderArgs = ["electron-builder", "--win", ...targets];
   try {
-    await runCommand(
-      "npx",
-      ["electron-builder", "--win", "nsis", "portable"],
-      packagingRoot,
-    );
+    await runCommand("npx", builderArgs, packagingRoot);
   } catch (error) {
     console.warn(
       "Standard Windows packaging failed. Retrying without executable resource editing for an unsigned local build.",
@@ -171,13 +180,7 @@ try {
     cleanReleaseDirectory(packagingRoot);
     await runCommand(
       "npx",
-      [
-        "electron-builder",
-        "--win",
-        "nsis",
-        "portable",
-        "-c.win.signAndEditExecutable=false",
-      ],
+      [...builderArgs, "-c.win.signAndEditExecutable=false"],
       packagingRoot,
     );
   }

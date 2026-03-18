@@ -24,6 +24,7 @@ import {
   toOverallStripViewModel,
   toTargetTrophyViewModel,
 } from "./components.js";
+import "./styles.css";
 
 const LOOP_TRANSITION_SETTLE_MS = 840;
 const flushEffects = () =>
@@ -76,6 +77,9 @@ const getPrimaryOverlayShell = (container: HTMLElement) =>
   container.querySelector(
     ".overlay-strip-shell, .target-trophy-overlay-shell",
   ) as HTMLElement | null;
+
+const getAnchorShell = (container: HTMLElement) =>
+  container.querySelector(".overlay-anchor-shell") as HTMLElement | null;
 
 const overlayData: OverlayDataResponse = {
   overall: {
@@ -865,7 +869,7 @@ describe("overlay strip components", () => {
     );
   });
 
-  it("shrinks embedded previews from fallback dimensions when route metrics arrive", async () => {
+  it("keeps embedded previews at fixed viewport dimensions when route metrics arrive", async () => {
     const { container } = render(
       <EmbeddedOverlayPreview
         title="Current game preview"
@@ -904,9 +908,61 @@ describe("overlay strip components", () => {
     });
 
     await flushEffects();
-    expect(wrapper?.style.getPropertyValue("--overlay-preview-viewport-width")).toBe("912px");
-    expect(wrapper?.style.getPropertyValue("--overlay-preview-viewport-height")).toBe("124px");
-    expect(wrapper?.style.height).toBe("124px");
+    expect(wrapper?.style.getPropertyValue("--overlay-preview-viewport-width")).toBe("1360px");
+    expect(wrapper?.style.getPropertyValue("--overlay-preview-viewport-height")).toBe("220px");
+    expect(wrapper?.style.height).toBe("220px");
+  });
+
+  it("rescales the embedded preview canvas when the host width shrinks", async () => {
+    let resizeCallback: ResizeObserverCallback | null = null;
+    class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) {
+        resizeCallback = callback;
+      }
+
+      observe() {}
+
+      disconnect() {}
+    }
+
+    vi.stubGlobal("ResizeObserver", ResizeObserverMock as unknown as typeof ResizeObserver);
+
+    const { container } = render(
+      <EmbeddedOverlayPreview
+        title="Current game preview"
+        srcPath="/overlay/current-game"
+        overlayData={overlayData}
+        settings={overlayData.display.settings}
+      />,
+    );
+
+    await flushEffects();
+
+    const wrapper = container.querySelector(".embedded-overlay-preview") as HTMLDivElement | null;
+    const canvas = container.querySelector(".embedded-overlay-preview-canvas") as HTMLDivElement | null;
+
+    expect(wrapper).not.toBeNull();
+    expect(canvas).not.toBeNull();
+
+    wrapper!.getBoundingClientRect = () => createRect(680, 220);
+
+    act(() => {
+      resizeCallback?.(
+        [
+          ({
+            target: wrapper!,
+            contentRect: createRect(680, 220),
+          } as unknown as ResizeObserverEntry),
+        ],
+        {} as ResizeObserver,
+      );
+    });
+
+    await flushEffects();
+
+    expect(wrapper?.style.height).toBe("110px");
+    expect(canvas?.style.width).toBe("680px");
+    expect(canvas?.style.height).toBe("110px");
   });
 
   it("renders the overall route with the fluid strip class and respects strip section toggles", async () => {
@@ -958,6 +1014,10 @@ describe("overlay strip components", () => {
       const { container, unmount } = render(element);
       await flushEffects();
       expect(container.querySelector(".overlay-scene-anchor-top-right")).not.toBeNull();
+      expect(getAnchorShell(container)).toHaveAttribute(
+        "data-overlay-horizontal-anchor",
+        "right",
+      );
       expect(getPrimaryOverlayShell(container)).toHaveAttribute(
         "data-overlay-horizontal-anchor",
         "right",
@@ -994,6 +1054,10 @@ describe("overlay strip components", () => {
       const { container, unmount } = render(element);
       await flushEffects();
       expect(container.querySelector(".overlay-scene-anchor-bottom-left")).not.toBeNull();
+      expect(getAnchorShell(container)).toHaveAttribute(
+        "data-overlay-horizontal-anchor",
+        "left",
+      );
       expect(getPrimaryOverlayShell(container)).toHaveAttribute(
         "data-overlay-horizontal-anchor",
         "left",
@@ -1137,14 +1201,16 @@ describe("overlay strip components", () => {
     setMeasuredWidth("targetTrophy", 460);
     await flushEffects();
     expect(shell.dataset.loopShellWidth).toBe("420");
-    expect(shell.style.width).toBe("420px");
+    expect(shell.style.width).toBe("100%");
+    expect(shell.style.maxWidth).toBe("420px");
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(targetLoopData.display.settings.overallDurationMs + 1);
     });
     await flushEffects();
     expect(shell.dataset.loopShellWidth).toBe("640");
-    expect(shell.style.width).toBe("640px");
+    expect(shell.style.width).toBe("100%");
+    expect(shell.style.maxWidth).toBe("640px");
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(LOOP_TRANSITION_SETTLE_MS);
@@ -1163,7 +1229,8 @@ describe("overlay strip components", () => {
     });
     await flushEffects();
     expect(shell.dataset.loopShellWidth).toBe("460");
-    expect(shell.style.width).toBe("460px");
+    expect(shell.style.width).toBe("100%");
+    expect(shell.style.maxWidth).toBe("460px");
   });
 
   it("prefers intrinsic width metrics over a smaller bounding box during measurement", async () => {
@@ -1193,7 +1260,128 @@ describe("overlay strip components", () => {
     await flushEffects();
 
     expect(shell.dataset.loopShellWidth).toBe("710");
-    expect(shell.style.width).toBe("710px");
+    expect(shell.style.width).toBe("100%");
+    expect(shell.style.maxWidth).toBe("710px");
+  });
+
+  it("uses a full-width anchor shell for right-aligned live routes", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          ...overlayData,
+          display: {
+            ...overlayData.display,
+            settings: {
+              ...overlayData.display.settings,
+              overlayAnchor: "bottom-right",
+            },
+          },
+        }),
+      })),
+    );
+
+    const routeAssertions = async (path: string, element: ReactElement) => {
+      window.history.pushState({}, "", path);
+      const { container, unmount } = render(element);
+      await flushEffects();
+
+      expect(getAnchorShell(container)).toHaveAttribute(
+        "data-overlay-horizontal-anchor",
+        "right",
+      );
+      expect(getAnchorShell(container)).toHaveStyle({
+        width: "100%",
+        maxWidth: "100%",
+      });
+
+      unmount();
+    };
+
+    await routeAssertions("/overlay/loop", <LoopOverlay />);
+    await routeAssertions("/overlay/overall", <OverallOverlay />);
+    await routeAssertions("/overlay/current-game", <CurrentGameOverlay />);
+    await routeAssertions("/overlay/target-trophy", <TargetTrophyOverlay />);
+  });
+
+  it("keeps the standalone target trophy route content-sized inside the shared anchor shell", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          ...overlayData,
+          display: {
+            ...overlayData.display,
+            settings: {
+              ...overlayData.display.settings,
+              overlayAnchor: "bottom-right",
+            },
+          },
+        }),
+      })),
+    );
+
+    window.history.pushState({}, "", "/overlay/target-trophy");
+    const { container } = render(<TargetTrophyOverlay />);
+    await flushEffects();
+
+    expect(getPrimaryOverlayShell(container)).toHaveStyle({
+      width: "fit-content",
+      maxWidth: "100%",
+    });
+  });
+
+  it("uses a flexible identity column to clamp long strip titles within the card", () => {
+    const longTitle = "An Extremely Long Current Game Name That Keeps Going Well Past Any Reasonable Overlay Width And Should Truncate";
+    const { container } = render(
+      <OverlayStrip
+        viewModel={toCurrentGameStripViewModel({
+          ...overlayData.currentGame!,
+          titleName: longTitle,
+        })}
+      />,
+    );
+
+    const stripContent = container.querySelector(".overlay-strip-content") as HTMLDivElement | null;
+    const title = container.querySelector(".overlay-strip-zone-identity h2") as HTMLHeadingElement | null;
+
+    expect(stripContent?.style.gridTemplateColumns).toContain("minmax(0, 1fr)");
+    expect(title).toHaveAttribute("title", longTitle);
+    expect(title).toHaveStyle({
+      whiteSpace: "nowrap",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+    });
+  });
+
+  it("clamps long target trophy copy instead of forcing the card wider", () => {
+    const { container } = render(
+      <TargetTrophyCard
+        viewModel={toTargetTrophyViewModel({
+          ...overlayData.targetTrophy!,
+          trophyName: "An Extremely Long Target Trophy Name That Keeps Going Well Past Any Reasonable Overlay Width",
+          description:
+            "This description is intentionally long so the overlay relies on line clamping instead of widening the card itself.",
+        })}
+        variant="standalone"
+        tagLabel="Current Target"
+      />,
+    );
+
+    const title = container.querySelector(".target-trophy-title-row h2") as HTMLHeadingElement | null;
+    const description = container.querySelector(".target-trophy-description") as HTMLParagraphElement | null;
+
+    expect(title).toHaveStyle({
+      whiteSpace: "nowrap",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+    });
+    expect(description).toHaveStyle({
+      overflow: "hidden",
+      display: "-webkit-box",
+    });
   });
 
   it("renders target trophy sections using the shared order between artwork and target info", () => {

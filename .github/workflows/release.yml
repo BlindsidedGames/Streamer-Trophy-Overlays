@@ -25,11 +25,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Windows release artifacts
-        run: npm run dist:win
+      - name: Build Windows portable release artifact
+        run: npm run dist:win:portable
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
+          body_path: .github/release-body.md
           files: |
-            release/*.exe
+            release/*-portable.exe
+          fail_on_unmatched_files: true
