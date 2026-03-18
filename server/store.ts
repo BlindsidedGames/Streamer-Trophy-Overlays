@@ -5,8 +5,11 @@ import { dirname } from "node:path";
 import {
   createDefaultActiveGameSelection,
   createDefaultOverlaySettings,
+  defaultStripZoneOrder,
   type ActiveGameSelection,
+  type OverlayAnchor,
   type OverlaySettings,
+  type StripZoneKey,
   type TargetTrophySelection,
   type UpdateTargetTrophyRequest,
 } from "../shared/contracts.js";
@@ -20,9 +23,67 @@ type AppStateRow = {
   updated_at: string;
 };
 
+type LegacyOverlaySettings = {
+  showGradeRows?: unknown;
+  showOverallCompletion?: unknown;
+  showCurrentCompletion?: unknown;
+  showCurrentTotals?: unknown;
+};
+
+const normalizeStripZoneOrder = (value: unknown): StripZoneKey[] => {
+  if (!Array.isArray(value)) {
+    return [...defaultStripZoneOrder];
+  }
+
+  const seen = new Set<StripZoneKey>();
+  const normalized: StripZoneKey[] = [];
+
+  value.forEach((entry) => {
+    if (
+      typeof entry === "string" &&
+      defaultStripZoneOrder.includes(entry as StripZoneKey) &&
+      !seen.has(entry as StripZoneKey)
+    ) {
+      const zone = entry as StripZoneKey;
+      seen.add(zone);
+      normalized.push(zone);
+    }
+  });
+
+  defaultStripZoneOrder.forEach((zone) => {
+    if (!seen.has(zone)) {
+      normalized.push(zone);
+    }
+  });
+
+  return normalized;
+};
+
+const normalizeOverlayAnchor = (value: unknown): OverlayAnchor => {
+  switch (value) {
+    case "top-left":
+    case "top-right":
+    case "bottom-left":
+    case "bottom-right":
+      return value;
+    default:
+      return "bottom-left";
+  }
+};
+
 const sanitizeSettings = (value: unknown): OverlaySettings => {
   const defaults = createDefaultOverlaySettings();
-  const parsed = (value ?? {}) as Partial<OverlaySettings>;
+  const parsed = (value ?? {}) as Partial<OverlaySettings> & LegacyOverlaySettings;
+  const legacyMetricToggles = [
+    parsed.showOverallCompletion,
+    parsed.showCurrentCompletion,
+    parsed.showCurrentTotals,
+  ];
+  const hasLegacyMetricToggle = legacyMetricToggles.some(
+    (entry) => typeof entry === "boolean",
+  );
+  const areLegacyMetricTogglesAllFalse =
+    hasLegacyMetricToggle && legacyMetricToggles.every((entry) => entry === false);
 
   return {
     overallDurationMs: clampNumber(parsed.overallDurationMs, defaults.overallDurationMs, 1000, 60000),
@@ -38,16 +99,27 @@ const sanitizeSettings = (value: unknown): OverlaySettings => {
       1000,
       60000,
     ),
-    showGradeRows: Boolean(parsed.showGradeRows ?? defaults.showGradeRows),
-    showOverallCompletion: Boolean(
-      parsed.showOverallCompletion ?? defaults.showOverallCompletion,
-    ),
-    showCurrentCompletion: Boolean(
-      parsed.showCurrentCompletion ?? defaults.showCurrentCompletion,
-    ),
-    showCurrentTotals: Boolean(parsed.showCurrentTotals ?? defaults.showCurrentTotals),
+    showStripArtwork: Boolean(parsed.showStripArtwork ?? defaults.showStripArtwork),
+    showStripIdentity: Boolean(parsed.showStripIdentity ?? defaults.showStripIdentity),
+    showStripMetrics:
+      typeof parsed.showStripMetrics === "boolean"
+        ? parsed.showStripMetrics
+        : areLegacyMetricTogglesAllFalse
+          ? false
+          : defaults.showStripMetrics,
+    showStripTrophies:
+      typeof parsed.showStripTrophies === "boolean"
+        ? parsed.showStripTrophies
+        : typeof parsed.showGradeRows === "boolean"
+          ? parsed.showGradeRows
+          : defaults.showStripTrophies,
+    stripZoneOrder: normalizeStripZoneOrder(parsed.stripZoneOrder),
     showTargetTrophyInLoop: Boolean(
       parsed.showTargetTrophyInLoop ?? defaults.showTargetTrophyInLoop,
+    ),
+    overlayAnchor: normalizeOverlayAnchor(parsed.overlayAnchor),
+    showTargetTrophyInfo: Boolean(
+      parsed.showTargetTrophyInfo ?? defaults.showTargetTrophyInfo,
     ),
     showTargetTrophyTag: Boolean(
       parsed.showTargetTrophyTag ?? defaults.showTargetTrophyTag,

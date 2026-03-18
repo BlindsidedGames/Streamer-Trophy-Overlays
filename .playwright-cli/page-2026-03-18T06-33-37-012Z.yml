@@ -1,0 +1,19 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e8]:
+        - paragraph [ref=e9]: Streamer Tools
+        - paragraph [ref=e10]: PSN Trophy Overlay Suite
+      - tablist "Dashboard workspace" [ref=e12]:
+        - tab "Setup" [ref=e13] [cursor=pointer]
+        - tab "Game Selection" [selected] [ref=e14] [cursor=pointer]
+      - generic [ref=e16]:
+        - button "PSN access" [ref=e17] [cursor=pointer]
+        - button "Refresh all" [ref=e18] [cursor=pointer]
+  - tabpanel "Game Selection" [ref=e21]:
+    - generic [ref=e22]:
+      - generic [ref=e24]:
+        - generic [ref=e25]: Search older PSN titles
+        - searchbox "Search older PSN titles" [ref=e26]
+      - paragraph [ref=e28]: Recent titles
+      - paragraph [ref=e29]: No recent titles are available yet.

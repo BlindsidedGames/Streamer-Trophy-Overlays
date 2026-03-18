@@ -119,6 +119,25 @@ describe("desktop runtime helpers", () => {
     }
   });
 
+  it("falls back to the generated PNG icon when the ico is unavailable", () => {
+    const root = mkdtempSync(join(tmpdir(), "streamer-tools-electron-"));
+    temporaryDirectories.push(root);
+    mkdirSync(join(root, "build", "electron"), { recursive: true });
+    mkdirSync(join(root, "build-assets"), { recursive: true });
+    writeFileSync(join(root, "build-assets", "icon.png"), "icon", "utf8");
+
+    const previousCwd = process.cwd();
+    process.chdir(root);
+
+    try {
+      expect(resolveDesktopIconPath(join(root, "build", "electron"))).toBe(
+        join(root, "build-assets", "icon.png"),
+      );
+    } finally {
+      process.chdir(previousCwd);
+    }
+  });
+
   it("uses the host Node executable for desktop dev when npm provides one", () => {
     expect(
       resolveBackendExecDetails({

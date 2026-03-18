@@ -63,11 +63,15 @@ export const resolveServerEntryPath = ({
 };
 
 export const resolveDesktopIconPath = (appPath: string) => {
-  const candidates = [
-    resolve(appPath, "build-assets", "icon.ico"),
-    resolve(appPath, "..", "..", "build-assets", "icon.ico"),
-    resolve(process.cwd(), "build-assets", "icon.ico"),
+  const candidateRoots = [
+    resolve(appPath, "build-assets"),
+    resolve(appPath, "..", "..", "build-assets"),
+    resolve(process.cwd(), "build-assets"),
   ];
+  const candidates = candidateRoots.flatMap((root) => [
+    resolve(root, "icon.ico"),
+    resolve(root, "icon.png"),
+  ]);
 
   return candidates.find((candidate) => existsSync(candidate)) ?? null;
 };

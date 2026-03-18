@@ -5,6 +5,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import {
   BrowserWindow,
+  ipcMain,
   Menu,
   Tray,
   app,
@@ -39,7 +40,7 @@ type ManagedBackendProcess = {
 };
 
 const runtimeDirectory = dirname(fileURLToPath(import.meta.url));
-const preloadPath = resolve(runtimeDirectory, "preload.js");
+const preloadPath = resolve(runtimeDirectory, "preload.cjs");
 const singleInstanceLock = app.requestSingleInstanceLock();
 
 let mainWindow: BrowserWindow | null = null;
@@ -103,6 +104,7 @@ const buildWindow = async () => {
     autoHideMenuBar: true,
     title: "PSN Trophy Overlay Suite",
     icon: icon.isEmpty() ? undefined : icon,
+    frame: false,
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
@@ -136,9 +138,19 @@ const buildWindow = async () => {
     }
   });
 
+  const emitWindowState = () => {
+    window.webContents.send("desktop-window:maximized-changed", window.isMaximized());
+  };
+
+  window.on("maximize", emitWindowState);
+  window.on("unmaximize", emitWindowState);
+  window.on("enter-full-screen", emitWindowState);
+  window.on("leave-full-screen", emitWindowState);
+
   await window.loadURL(activeRendererUrl);
   window.show();
   window.focus();
+  emitWindowState();
   mainWindow = window;
   return window;
 };
@@ -382,6 +394,33 @@ app.on("before-quit", () => {
 
 app.on("activate", () => {
   void showMainWindow();
+});
+
+ipcMain.on("desktop-window:minimize", (event) => {
+  BrowserWindow.fromWebContents(event.sender)?.minimize();
+});
+
+ipcMain.on("desktop-window:maximize-or-restore", (event) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+
+  if (!window) {
+    return;
+  }
+
+  if (window.isMaximized()) {
+    window.unmaximize();
+    return;
+  }
+
+  window.maximize();
+});
+
+ipcMain.on("desktop-window:close", (event) => {
+  BrowserWindow.fromWebContents(event.sender)?.close();
+});
+
+ipcMain.handle("desktop-window:is-maximized", (event) => {
+  return BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false;
 });
 
 app.whenReady().then(async () => {

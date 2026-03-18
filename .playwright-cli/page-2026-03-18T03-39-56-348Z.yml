@@ -1,0 +1,102 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - tablist "Dashboard workspace" [ref=e6]:
+        - tab "Setup" [active] [selected] [ref=e7] [cursor=pointer]
+        - tab "Game Selection" [ref=e8] [cursor=pointer]
+        - tab "Trophy Browser" [ref=e24] [cursor=pointer]
+      - generic [ref=e9]:
+        - button "PSN access" [ref=e10] [cursor=pointer]
+        - button "Refresh all" [ref=e11] [cursor=pointer]
+    - paragraph [ref=e25]: Manage overlay routes, timing controls, and the stream-facing preview surfaces.
+  - tabpanel "Setup" [ref=e26]:
+    - generic [ref=e27]:
+      - article [ref=e28]:
+        - heading "Manage overlay routes" [level=3] [ref=e30]
+        - generic [ref=e31]:
+          - generic [ref=e32]:
+            - term [ref=e33]: Source
+            - definition [ref=e34]: psn-api
+          - generic [ref=e35]:
+            - term [ref=e36]: PSN access
+            - definition [ref=e37]: Saved locally
+          - generic [ref=e38]:
+            - term [ref=e39]: Token updated
+            - definition [ref=e40]: 3/18/2026, 11:01:30 AM
+          - generic [ref=e41]:
+            - term [ref=e42]: Fetched
+            - definition [ref=e43]: 2026-03-18T03:39:40.317Z
+          - generic [ref=e44]:
+            - term [ref=e45]: Warnings
+            - definition [ref=e46]: "0"
+        - generic [ref=e47]:
+          - generic [ref=e48]: http://127.0.0.1:5177/overlay/loop
+          - generic [ref=e49]: http://127.0.0.1:5177/overlay/overall
+          - generic [ref=e50]: http://127.0.0.1:5177/overlay/current-game
+          - generic [ref=e51]: http://127.0.0.1:5177/overlay/target-trophy
+      - article [ref=e52]:
+        - generic [ref=e53]:
+          - heading "Timing controls" [level=3] [ref=e54]
+          - button "Save settings" [ref=e55] [cursor=pointer]
+        - generic [ref=e56]:
+          - generic [ref=e57]:
+            - generic [ref=e58]: Overall duration (ms)
+            - spinbutton "Overall duration (ms)" [ref=e59]: "1000"
+          - generic [ref=e60]:
+            - generic [ref=e61]: Current game duration (ms)
+            - spinbutton "Current game duration (ms)" [ref=e62]: "1000"
+          - generic [ref=e63]:
+            - generic [ref=e64]: Target trophy duration (ms)
+            - spinbutton "Target trophy duration (ms)" [ref=e65]: "12000"
+          - generic [ref=e66]:
+            - generic [ref=e67]: Target trophy tag text
+            - textbox "Target trophy tag text" [ref=e68]: Current Target
+        - generic [ref=e69]:
+          - generic [ref=e70]:
+            - checkbox "Show grade rows" [checked] [ref=e71]
+            - generic [ref=e72]: Show grade rows
+          - generic [ref=e73]:
+            - checkbox "Show overall completion" [checked] [ref=e74]
+            - generic [ref=e75]: Show overall completion
+          - generic [ref=e76]:
+            - checkbox "Show current completion" [checked] [ref=e77]
+            - generic [ref=e78]: Show current completion
+          - generic [ref=e79]:
+            - checkbox "Show current totals" [checked] [ref=e80]
+            - generic [ref=e81]: Show current totals
+          - generic [ref=e82]:
+            - checkbox "Show target trophy in loop" [ref=e83]
+            - generic [ref=e84]: Show target trophy in loop
+          - generic [ref=e85]:
+            - checkbox "Show target trophy tag" [checked] [ref=e86]
+            - generic [ref=e87]: Show target trophy tag
+    - generic [ref=e89]:
+      - iframe [ref=e92]:
+        - generic [ref=f3e8]:
+          - heading "Showdown at the Tar Lake" [level=2] [ref=f3e10]
+          - generic [ref=f3e11]: Current Target
+          - paragraph [ref=f3e12]: Defeat the Lord of the Tar Lake.
+      - iframe [ref=e95]:
+        - generic [ref=f4e7]:
+          - generic [ref=f4e10]:
+            - 'heading "DEATH STRANDING 2: ON THE BEACH" [level=2] [ref=f4e11]'
+            - generic [ref=f4e12]: PS5
+          - generic [ref=f4e13]:
+            - strong [ref=f4e14]: 70%
+            - generic [ref=f4e17]: 47 / 55 earned
+          - generic [ref=f4e18]:
+            - strong [ref=f4e21]: 0/1
+            - strong [ref=f4e24]: 0/2
+            - strong [ref=f4e27]: 2/6
+            - strong [ref=f4e30]: 45/46
+    - generic [ref=e96]:
+      - generic [ref=e98]:
+        - generic [ref=e99]:
+          - paragraph [ref=e100]: Advanced Overrides
+          - heading "Custom mode and manual edits" [level=2] [ref=e101]
+        - button "Expand" [ref=e102] [cursor=pointer]
+      - generic [ref=e104]:
+        - generic [ref=e105]:
+          - paragraph [ref=e106]: Debug
+          - heading "Raw payload" [level=2] [ref=e107]
+        - button "Expand" [ref=e108] [cursor=pointer]

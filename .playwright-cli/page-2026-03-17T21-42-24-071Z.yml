@@ -1,0 +1,292 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - paragraph [ref=e6]: Streamer Tools
+      - heading "PSN Trophy Control Room" [level=1] [ref=e7]
+      - paragraph [ref=e8]: Pick the active game visually, browse its trophies, and pin the one you want on stream without dropping into the override form by default.
+    - generic [ref=e9]: Refreshing
+  - generic [ref=e10]:
+    - generic [ref=e11]:
+      - generic [ref=e12]:
+        - paragraph [ref=e13]: PSN Access
+        - heading "Local token storage" [level=2] [ref=e14]
+      - generic [ref=e15]: Saved locally
+    - generic [ref=e16]:
+      - generic [ref=e17]:
+        - generic [ref=e18]: PSN token
+        - textbox "PSN token" [ref=e19]:
+          - /placeholder: Paste your NPSSO token
+      - generic [ref=e20]:
+        - button "Save token" [disabled] [ref=e21]
+        - button "Clear token" [ref=e22] [cursor=pointer]
+    - generic [ref=e23]:
+      - generic [ref=e24]:
+        - term [ref=e25]: Status
+        - definition [ref=e26]: Saved locally
+      - generic [ref=e27]:
+        - term [ref=e28]: Storage
+        - definition [ref=e29]: local-file
+      - generic [ref=e30]:
+        - term [ref=e31]: Updated
+        - definition [ref=e32]: 3/17/2026, 6:22:42 PM
+    - paragraph [ref=e33]:
+      - text: Stored only on this machine in
+      - code [ref=e34]: ~/.streamer-tools/psn-credentials.json
+      - text: . The saved token is never returned to this page.
+  - generic [ref=e35]:
+    - article [ref=e36]:
+      - generic [ref=e37]:
+        - generic [ref=e38]:
+          - paragraph [ref=e39]: Connection
+          - heading "Runtime and routes" [level=2] [ref=e40]
+        - button "Refresh all" [ref=e41] [cursor=pointer]
+      - generic [ref=e42]:
+        - generic [ref=e43]:
+          - term [ref=e44]: Source
+          - definition [ref=e45]: psn-api
+        - generic [ref=e46]:
+          - term [ref=e47]: Configured
+          - definition [ref=e48]: "Yes"
+        - generic [ref=e49]:
+          - term [ref=e50]: Fetched
+          - definition [ref=e51]: 2026-03-17T21:42:11.247Z
+        - generic [ref=e52]:
+          - term [ref=e53]: Warnings
+          - definition [ref=e54]: "0"
+      - generic [ref=e55]:
+        - generic [ref=e56]: http://localhost:4318/overlay/loop
+        - generic [ref=e57]: http://localhost:4318/overlay/overall
+        - generic [ref=e58]: http://localhost:4318/overlay/current-game
+        - generic [ref=e59]: http://localhost:4318/overlay/target-trophy
+    - article [ref=e60]:
+      - generic [ref=e61]:
+        - generic [ref=e62]:
+          - paragraph [ref=e63]: Display Settings
+          - heading "Loop timing and visibility" [level=2] [ref=e64]
+        - button "Save settings" [ref=e65] [cursor=pointer]
+      - generic [ref=e66]:
+        - generic [ref=e67]:
+          - generic [ref=e68]: Overall duration (ms)
+          - spinbutton "Overall duration (ms)" [ref=e69]: "1000"
+        - generic [ref=e70]:
+          - generic [ref=e71]: Current game duration (ms)
+          - spinbutton "Current game duration (ms)" [ref=e72]: "1000"
+        - generic [ref=e73]:
+          - generic [ref=e74]: Target trophy duration (ms)
+          - spinbutton "Target trophy duration (ms)" [ref=e75]: "1000"
+        - generic [ref=e76]:
+          - generic [ref=e77]: Target trophy tag text
+          - textbox "Target trophy tag text" [ref=e78]: Current Target
+      - generic [ref=e79]:
+        - generic [ref=e80]:
+          - checkbox "Show grade rows" [checked] [ref=e81]
+          - generic [ref=e82]: Show grade rows
+        - generic [ref=e83]:
+          - checkbox "Show overall completion" [checked] [ref=e84]
+          - generic [ref=e85]: Show overall completion
+        - generic [ref=e86]:
+          - checkbox "Show current completion" [checked] [ref=e87]
+          - generic [ref=e88]: Show current completion
+        - generic [ref=e89]:
+          - checkbox "Show current totals" [checked] [ref=e90]
+          - generic [ref=e91]: Show current totals
+        - generic [ref=e92]:
+          - checkbox "Show target trophy in loop" [ref=e93]
+          - generic [ref=e94]: Show target trophy in loop
+        - generic [ref=e95]:
+          - checkbox "Show target trophy tag" [checked] [ref=e96]
+          - generic [ref=e97]: Show target trophy tag
+  - generic [ref=e98]:
+    - generic [ref=e100]:
+      - paragraph [ref=e101]: Live Preview
+      - heading "HUD and target trophy" [level=2] [ref=e102]
+    - generic [ref=e103]:
+      - article [ref=e104]:
+        - paragraph [ref=e105]: Target trophy
+        - generic [ref=e109]:
+          - heading "Showdown at the Tar Lake" [level=2] [ref=e111]
+          - generic [ref=e112]: Current Target
+          - paragraph [ref=e113]: Defeat the Lord of the Tar Lake.
+      - article [ref=e114]:
+        - paragraph [ref=e115]: Main HUD
+        - generic [ref=e118]:
+          - generic [ref=e121]:
+            - 'heading "DEATH STRANDING 2: ON THE BEACH" [level=2] [ref=e122]'
+            - generic [ref=e123]: PS5
+          - generic [ref=e124]:
+            - strong [ref=e125]: 70%
+            - generic [ref=e128]: 47 / 55 earned
+          - generic [ref=e129]:
+            - strong [ref=e132]: 0/1
+            - strong [ref=e135]: 0/2
+            - strong [ref=e138]: 2/6
+            - strong [ref=e141]: 45/46
+  - generic [ref=e142]:
+    - generic [ref=e143]:
+      - generic [ref=e144]:
+        - paragraph [ref=e145]: Active Game Selection
+        - heading "Recent titles and older-title search" [level=2] [ref=e146]
+      - button "Use custom game" [ref=e148] [cursor=pointer]
+    - generic [ref=e150]:
+      - generic [ref=e151]: Search older PSN titles
+      - searchbox "Search older PSN titles" [ref=e152]
+    - generic [ref=e153]:
+      - button "Lawn Mowing Simulator PS5 8% complete" [ref=e154] [cursor=pointer]:
+        - generic [ref=e155]:
+          - generic [ref=e156]:
+            - heading "Lawn Mowing Simulator" [level=3] [ref=e157]
+            - generic [ref=e158]: PS5
+          - generic [ref=e160]: 8% complete
+      - 'button "Bluey: The Videogame PS5 100% complete" [ref=e161] [cursor=pointer]':
+        - generic [ref=e162]:
+          - generic [ref=e163]:
+            - 'heading "Bluey: The Videogame" [level=3] [ref=e164]'
+            - generic [ref=e165]: PS5
+          - generic [ref=e167]: 100% complete
+      - button "Bus Simulator 21 PS5 1% complete" [ref=e168] [cursor=pointer]:
+        - generic [ref=e169]:
+          - generic [ref=e170]:
+            - heading "Bus Simulator 21" [level=3] [ref=e171]
+            - generic [ref=e172]: PS5
+          - generic [ref=e174]: 1% complete
+      - button "Disney•Pixar WALL-E PS5 1% complete" [ref=e175] [cursor=pointer]:
+        - generic [ref=e176]:
+          - generic [ref=e177]:
+            - heading "Disney•Pixar WALL-E" [level=3] [ref=e178]
+            - generic [ref=e179]: PS5
+          - generic [ref=e181]: 1% complete
+      - button "The Last of Us™ Part I PS5 1% complete" [ref=e182] [cursor=pointer]:
+        - generic [ref=e183]:
+          - generic [ref=e184]:
+            - heading "The Last of Us™ Part I" [level=3] [ref=e185]
+            - generic [ref=e186]: PS5
+          - generic [ref=e188]: 1% complete
+      - button "Cyberpunk 2077 PS5 1% complete" [ref=e189] [cursor=pointer]:
+        - generic [ref=e190]:
+          - generic [ref=e191]:
+            - heading "Cyberpunk 2077" [level=3] [ref=e192]
+            - generic [ref=e193]: PS5
+          - generic [ref=e195]: 1% complete
+      - button "Easter Journey PS5 100% complete" [ref=e196] [cursor=pointer]:
+        - generic [ref=e197]:
+          - generic [ref=e198]:
+            - heading "Easter Journey" [level=3] [ref=e199]
+            - generic [ref=e200]: PS5
+          - generic [ref=e202]: 100% complete
+      - button "Caravan Journey PS5 100% complete" [ref=e203] [cursor=pointer]:
+        - generic [ref=e204]:
+          - generic [ref=e205]:
+            - heading "Caravan Journey" [level=3] [ref=e206]
+            - generic [ref=e207]: PS5
+          - generic [ref=e209]: 100% complete
+      - button "Drag Journey PS5 100% complete" [ref=e210] [cursor=pointer]:
+        - generic [ref=e211]:
+          - generic [ref=e212]:
+            - heading "Drag Journey" [level=3] [ref=e213]
+            - generic [ref=e214]: PS5
+          - generic [ref=e216]: 100% complete
+      - button "Desert Journey PS5 100% complete" [ref=e217] [cursor=pointer]:
+        - generic [ref=e218]:
+          - generic [ref=e219]:
+            - heading "Desert Journey" [level=3] [ref=e220]
+            - generic [ref=e221]: PS5
+          - generic [ref=e223]: 100% complete
+      - 'button "Snow Journey: Nitro PS5 100% complete" [ref=e224] [cursor=pointer]':
+        - generic [ref=e225]:
+          - generic [ref=e226]:
+            - 'heading "Snow Journey: Nitro" [level=3] [ref=e227]'
+            - generic [ref=e228]: PS5
+          - generic [ref=e230]: 100% complete
+      - button "Dirt Journey PS5 100% complete" [ref=e231] [cursor=pointer]:
+        - generic [ref=e232]:
+          - generic [ref=e233]:
+            - heading "Dirt Journey" [level=3] [ref=e234]
+            - generic [ref=e235]: PS5
+          - generic [ref=e237]: 100% complete
+      - button "Monster Truck Journey PS5 100% complete" [ref=e238] [cursor=pointer]:
+        - generic [ref=e239]:
+          - generic [ref=e240]:
+            - heading "Monster Truck Journey" [level=3] [ref=e241]
+            - generic [ref=e242]: PS5
+          - generic [ref=e244]: 100% complete
+      - button "Tractor Journey PS5 100% complete" [ref=e245] [cursor=pointer]:
+        - generic [ref=e246]:
+          - generic [ref=e247]:
+            - heading "Tractor Journey" [level=3] [ref=e248]
+            - generic [ref=e249]: PS5
+          - generic [ref=e251]: 100% complete
+      - button "Speed Journey PS5 100% complete" [ref=e252] [cursor=pointer]:
+        - generic [ref=e253]:
+          - generic [ref=e254]:
+            - heading "Speed Journey" [level=3] [ref=e255]
+            - generic [ref=e256]: PS5
+          - generic [ref=e258]: 100% complete
+      - 'button "Italian Journey: Nitro PS5 100% complete" [ref=e259] [cursor=pointer]':
+        - generic [ref=e260]:
+          - generic [ref=e261]:
+            - 'heading "Italian Journey: Nitro" [level=3] [ref=e262]'
+            - generic [ref=e263]: PS5
+          - generic [ref=e265]: 100% complete
+      - 'button "Sprint Journey: Nitro PS5 100% complete" [ref=e266] [cursor=pointer]':
+        - generic [ref=e267]:
+          - generic [ref=e268]:
+            - 'heading "Sprint Journey: Nitro" [level=3] [ref=e269]'
+            - generic [ref=e270]: PS5
+          - generic [ref=e272]: 100% complete
+      - 'button "Monument Journey: Nitro PS5 100% complete" [ref=e273] [cursor=pointer]':
+        - generic [ref=e274]:
+          - generic [ref=e275]:
+            - 'heading "Monument Journey: Nitro" [level=3] [ref=e276]'
+            - generic [ref=e277]: PS5
+          - generic [ref=e279]: 100% complete
+      - 'button "Speed Journey: Nitro PS5 100% complete" [ref=e280] [cursor=pointer]':
+        - generic [ref=e281]:
+          - generic [ref=e282]:
+            - 'heading "Speed Journey: Nitro" [level=3] [ref=e283]'
+            - generic [ref=e284]: PS5
+          - generic [ref=e286]: 100% complete
+      - button "Classic Journey PS5 100% complete" [ref=e287] [cursor=pointer]:
+        - generic [ref=e288]:
+          - generic [ref=e289]:
+            - heading "Classic Journey" [level=3] [ref=e290]
+            - generic [ref=e291]: PS5
+          - generic [ref=e293]: 100% complete
+      - button "Lies of P PS5 2% complete" [ref=e294] [cursor=pointer]:
+        - generic [ref=e295]:
+          - generic [ref=e296]:
+            - heading "Lies of P" [level=3] [ref=e297]
+            - generic [ref=e298]: PS5
+          - generic [ref=e300]: 2% complete
+      - button "The Talos Principle 2 PS5 62% complete" [ref=e301] [cursor=pointer]:
+        - generic [ref=e302]:
+          - generic [ref=e303]:
+            - heading "The Talos Principle 2" [level=3] [ref=e304]
+            - generic [ref=e305]: PS5
+          - generic [ref=e307]: 62% complete
+      - button "PAW Patrol World PS5 40% complete" [ref=e308] [cursor=pointer]:
+        - generic [ref=e309]:
+          - generic [ref=e310]:
+            - heading "PAW Patrol World" [level=3] [ref=e311]
+            - generic [ref=e312]: PS5
+          - generic [ref=e314]: 40% complete
+      - button "Microsoft Flight Simulator 2024 PS5 6% complete" [ref=e315] [cursor=pointer]:
+        - generic [ref=e316]:
+          - generic [ref=e317]:
+            - heading "Microsoft Flight Simulator 2024" [level=3] [ref=e318]
+            - generic [ref=e319]: PS5
+          - generic [ref=e321]: 6% complete
+  - generic [ref=e322]:
+    - generic [ref=e324]:
+      - paragraph [ref=e325]: Trophy Browser
+      - heading "Select a PSN title" [level=2] [ref=e326]
+    - paragraph [ref=e327]: Loading trophies…
+  - generic [ref=e329]:
+    - generic [ref=e330]:
+      - paragraph [ref=e331]: Advanced Overrides
+      - heading "Custom mode and manual edits" [level=2] [ref=e332]
+    - button "Show" [ref=e333] [cursor=pointer]
+  - generic [ref=e335]:
+    - generic [ref=e336]:
+      - paragraph [ref=e337]: Debug
+      - heading "Raw payload" [level=2] [ref=e338]
+    - button "Show" [ref=e339] [cursor=pointer]
