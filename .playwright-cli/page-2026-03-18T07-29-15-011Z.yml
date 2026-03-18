@@ -1,0 +1,143 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e8]:
+        - paragraph [ref=e9]: Streamer Tools
+        - paragraph [ref=e10]: PSN Trophy Overlay Suite
+      - tablist "Dashboard workspace" [ref=e12]:
+        - tab "Setup" [selected] [ref=e13] [cursor=pointer]
+        - tab "Game Selection" [ref=e14] [cursor=pointer]
+        - tab "Trophy Browser" [ref=e124] [cursor=pointer]
+      - generic [ref=e16]:
+        - button "PSN access" [ref=e17] [cursor=pointer]
+        - button "Refresh all" [ref=e18] [cursor=pointer]
+  - tabpanel "Setup" [ref=e21]:
+    - generic [ref=e22]:
+      - heading "Config and preview" [level=3] [ref=e24]
+      - generic [ref=e25]:
+        - generic [ref=e26]:
+          - generic [ref=e27]:
+            - generic [ref=e28]:
+              - generic [ref=e29]: Overall duration (ms)
+              - spinbutton "Overall duration (ms)" [ref=e30]: "1000"
+            - generic [ref=e31]:
+              - generic [ref=e32]: Current game duration (ms)
+              - spinbutton "Current game duration (ms)" [ref=e33]: "1000"
+            - generic [ref=e34]:
+              - generic [ref=e35]: Target trophy duration (ms)
+              - spinbutton "Target trophy duration (ms)" [ref=e36]: "1000"
+            - generic [ref=e37]:
+              - generic [ref=e38]: Target trophy tag text
+              - textbox "Target trophy tag text" [ref=e39]: Current Target
+          - generic [ref=e40]:
+            - generic [ref=e41]:
+              - checkbox "Show artwork" [checked] [ref=e42]
+              - generic [ref=e43]: Show artwork
+            - generic [ref=e44]:
+              - checkbox "Show title and platform" [checked] [ref=e45]
+              - generic [ref=e46]: Show title and platform
+            - generic [ref=e47]:
+              - checkbox "Show progress and earned totals" [checked] [ref=e48]
+              - generic [ref=e49]: Show progress and earned totals
+            - generic [ref=e50]:
+              - checkbox "Show trophy counts" [checked] [ref=e51]
+              - generic [ref=e52]: Show trophy counts
+            - generic [ref=e53]:
+              - checkbox "Show target trophy in loop" [checked] [ref=e54]
+              - generic [ref=e55]: Show target trophy in loop
+            - generic [ref=e56]:
+              - checkbox "Keep loop width stable" [checked] [ref=e57]
+              - generic [ref=e58]: Keep loop width stable
+            - generic [ref=e59]:
+              - checkbox "Show target trophy tag" [ref=e60]
+              - generic [ref=e61]: Show target trophy tag
+            - generic [ref=e62]:
+              - checkbox "Show target info" [checked] [ref=e63]
+              - generic [ref=e64]: Show target info
+        - generic "Strip section order" [ref=e66]:
+          - generic [ref=e67]:
+            - generic [ref=e68]: ⋮⋮
+            - generic [ref=e69]: Artwork
+          - generic [ref=e70]:
+            - generic [ref=e71]: ⋮⋮
+            - generic [ref=e72]: Title and platform
+          - generic [ref=e73]:
+            - generic [ref=e74]: ⋮⋮
+            - generic [ref=e75]: Progress and earned totals
+          - generic [ref=e79]:
+            - generic [ref=e80]: ⋮⋮
+            - generic [ref=e81]: Target info
+          - generic [ref=e76]:
+            - generic [ref=e77]: ⋮⋮
+            - generic [ref=e78]: Trophy counts
+      - generic [ref=e82]:
+        - generic [ref=e83]:
+          - generic [ref=e84]:
+            - generic [ref=e85]: http://127.0.0.1:5181/overlay/loop
+            - button "Copy loop URL" [ref=e86] [cursor=pointer]: Copy
+          - iframe [ref=e89]:
+            - generic [ref=f1e34]:
+              - generic [ref=f1e37]:
+                - heading "Vathreon" [level=2] [ref=f1e38]
+                - generic [ref=f1e39]: PSN Profile
+              - generic [ref=f1e40]:
+                - strong [ref=f1e41]: 2,848
+                - generic [ref=f1e42]: Level progress 66%
+              - generic [ref=f1e45]:
+                - strong [ref=f1e48]: "50"
+                - strong [ref=f1e51]: "367"
+                - strong [ref=f1e54]: "503"
+                - strong [ref=f1e57]: 1,928
+        - generic [ref=e90]:
+          - generic [ref=e91]:
+            - generic [ref=e92]: http://127.0.0.1:5181/overlay/target-trophy
+            - button "Copy target trophy URL" [ref=e93] [cursor=pointer]: Copy
+          - iframe [ref=e96]:
+            - generic [ref=f2e10]:
+              - heading "Showdown at the Tar Lake" [level=2] [ref=f2e12]
+              - paragraph [ref=f2e13]: Defeat the Lord of the Tar Lake.
+        - generic [ref=e97]:
+          - generic [ref=e98]:
+            - generic [ref=e99]: http://127.0.0.1:5181/overlay/overall
+            - button "Copy overall URL" [ref=e100] [cursor=pointer]: Copy
+          - iframe [ref=e103]:
+            - generic [ref=f3e7]:
+              - generic [ref=f3e10]:
+                - heading "Vathreon" [level=2] [ref=f3e11]
+                - generic [ref=f3e12]: PSN Profile
+              - generic [ref=f3e13]:
+                - strong [ref=f3e14]: 2,848
+                - generic [ref=f3e15]: Level progress 66%
+              - generic [ref=f3e18]:
+                - strong [ref=f3e21]: "50"
+                - strong [ref=f3e24]: "367"
+                - strong [ref=f3e27]: "503"
+                - strong [ref=f3e30]: 1,928
+        - generic [ref=e104]:
+          - generic [ref=e105]:
+            - generic [ref=e106]: http://127.0.0.1:5181/overlay/current-game
+            - button "Copy current game URL" [ref=e107] [cursor=pointer]: Copy
+          - iframe [ref=e110]:
+            - generic [ref=f4e7]:
+              - generic [ref=f4e10]:
+                - 'heading "DEATH STRANDING 2: ON THE BEACH" [level=2] [ref=f4e11]'
+                - generic [ref=f4e12]: PS5
+              - generic [ref=f4e13]:
+                - strong [ref=f4e14]: 70%
+                - generic [ref=f4e15]: 47 / 55 earned
+              - generic [ref=f4e18]:
+                - strong [ref=f4e21]: 0/1
+                - strong [ref=f4e24]: 0/2
+                - strong [ref=f4e27]: 2/6
+                - strong [ref=f4e30]: 45/46
+    - generic [ref=e111]:
+      - generic [ref=e113]:
+        - generic [ref=e114]:
+          - paragraph [ref=e115]: Advanced Overrides
+          - heading "Custom mode and manual edits" [level=2] [ref=e116]
+        - button "Expand" [ref=e117] [cursor=pointer]
+      - generic [ref=e119]:
+        - generic [ref=e120]:
+          - paragraph [ref=e121]: Debug
+          - heading "Raw payload" [level=2] [ref=e122]
+        - button "Expand" [ref=e123] [cursor=pointer]

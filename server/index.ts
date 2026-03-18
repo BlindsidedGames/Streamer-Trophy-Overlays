@@ -1,34 +1,87 @@
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { startServerRuntime } from "./runtime.js";
 
-import dotenv from "dotenv";
+const resolveStartupErrorMessage = (error: unknown) => {
+  if (typeof error === "object" && error !== null) {
+    const code =
+      "code" in error && typeof error.code === "string" ? error.code : null;
+    const message =
+      "message" in error && typeof error.message === "string"
+        ? error.message
+        : "Unknown startup failure.";
 
-import { createApp } from "./app.js";
-import { attachHostedUi, resolveHostedUiPaths } from "./hosted-ui.js";
+    if (code === "EADDRINUSE") {
+      return "Port 4318 is already in use. Close the conflicting app or change PORT before retrying.";
+    }
 
-const runtimeDirectory = dirname(fileURLToPath(import.meta.url));
-const rootCandidates = [
-  process.cwd(),
-  resolve(runtimeDirectory, ".."),
-  resolve(runtimeDirectory, "../.."),
-];
-const { clientDirectory, envPath, imageDirectory } = resolveHostedUiPaths(rootCandidates);
+    return message;
+  }
 
-if (envPath) {
-  dotenv.config({ path: envPath });
-} else {
-  dotenv.config();
-}
+  return "Unknown startup failure.";
+};
 
-const port = Number(process.env.PORT ?? 4318);
-const app = createApp();
-const hostedUiAttached = attachHostedUi(app, { clientDirectory, imageDirectory });
+let runtime: Awaited<ReturnType<typeof startServerRuntime>> | null = null;
+let shuttingDown = false;
 
-app.listen(port, () => {
-  const baseUrl = `http://localhost:${port}`;
-  console.log(
-    hostedUiAttached
-      ? `PSN trophy suite listening on ${baseUrl}`
-      : `PSN trophy API listening on ${baseUrl}`,
-  );
-});
+const stopRuntime = async () => {
+  if (!runtime) {
+    return;
+  }
+
+  const nextRuntime = runtime;
+  runtime = null;
+  await nextRuntime.stop();
+};
+
+const shutdown = async (exitCode = 0) => {
+  if (shuttingDown) {
+    return;
+  }
+
+  shuttingDown = true;
+
+  try {
+    await stopRuntime();
+  } finally {
+    process.exit(exitCode);
+  }
+};
+
+const registerSignalHandlers = () => {
+  const handleSignal = () => {
+    void shutdown(0);
+  };
+
+  process.once("SIGINT", handleSignal);
+  process.once("SIGTERM", handleSignal);
+};
+
+const main = async () => {
+  try {
+    runtime = await startServerRuntime();
+    registerSignalHandlers();
+    console.log(
+      runtime.hostedUiAttached
+        ? `PSN trophy suite listening on ${runtime.baseUrl}`
+        : `PSN trophy API listening on ${runtime.baseUrl}`,
+    );
+    process.send?.({
+      type: "server-ready",
+      baseUrl: runtime.baseUrl,
+      hostedUiAttached: runtime.hostedUiAttached,
+    });
+  } catch (error) {
+    const message = resolveStartupErrorMessage(error);
+    console.error(message);
+    process.send?.({
+      type: "startup-error",
+      message,
+      code:
+        typeof error === "object" && error !== null && "code" in error
+          ? error.code
+          : undefined,
+    });
+    process.exit(1);
+  }
+};
+
+void main();

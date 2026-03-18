@@ -1,0 +1,114 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e8]:
+        - paragraph [ref=e9]: Streamer Tools
+        - paragraph [ref=e10]: PSN Trophy Overlay Suite
+      - tablist "Dashboard workspace" [ref=e12]:
+        - tab "Setup" [selected] [ref=e13] [cursor=pointer]
+        - tab "Game Selection" [ref=e14] [cursor=pointer]
+      - generic [ref=e16]:
+        - button "PSN access" [ref=e17] [cursor=pointer]
+        - button "Refresh all" [ref=e18] [cursor=pointer]
+  - tabpanel "Setup" [ref=e21]:
+    - generic [ref=e22]:
+      - heading "Config and preview" [level=3] [ref=e24]
+      - generic [ref=e25]:
+        - generic [ref=e26]:
+          - generic [ref=e27]:
+            - generic [ref=e28]:
+              - generic [ref=e29]: Overall duration (ms)
+              - spinbutton "Overall duration (ms)" [ref=e30]: "5000"
+            - generic [ref=e31]:
+              - generic [ref=e32]: Current game duration (ms)
+              - spinbutton "Current game duration (ms)" [ref=e33]: "12000"
+            - generic [ref=e34]:
+              - generic [ref=e35]: Target trophy duration (ms)
+              - spinbutton "Target trophy duration (ms)" [ref=e36]: "12000"
+            - generic [ref=e37]:
+              - generic [ref=e38]: Target trophy tag text
+              - textbox "Target trophy tag text" [ref=e39]: Current Target
+          - generic [ref=e40]:
+            - generic [ref=e41]:
+              - checkbox "Show artwork" [checked] [ref=e42]
+              - generic [ref=e43]: Show artwork
+            - generic [ref=e44]:
+              - checkbox "Show title and platform" [checked] [ref=e45]
+              - generic [ref=e46]: Show title and platform
+            - generic [ref=e47]:
+              - checkbox "Show progress and earned totals" [checked] [ref=e48]
+              - generic [ref=e49]: Show progress and earned totals
+            - generic [ref=e50]:
+              - checkbox "Show trophy counts" [checked] [ref=e51]
+              - generic [ref=e52]: Show trophy counts
+            - generic [ref=e53]:
+              - checkbox "Show target trophy in loop" [ref=e54]
+              - generic [ref=e55]: Show target trophy in loop
+            - generic [ref=e56]:
+              - checkbox "Show target trophy tag" [checked] [ref=e57]
+              - generic [ref=e58]: Show target trophy tag
+            - generic [ref=e59]:
+              - checkbox "Show target info" [checked] [ref=e60]
+              - generic [ref=e61]: Show target info
+        - generic "Strip section order" [ref=e63]:
+          - generic [ref=e64]:
+            - generic [ref=e65]: ⋮⋮
+            - generic [ref=e66]: Artwork
+          - generic [ref=e67]:
+            - generic [ref=e68]: ⋮⋮
+            - generic [ref=e69]: Title and platform
+          - generic [ref=e70]:
+            - generic [ref=e71]: ⋮⋮
+            - generic [ref=e72]: Progress and earned totals
+          - generic [ref=e73]:
+            - generic [ref=e74]: ⋮⋮
+            - generic [ref=e75]: Trophy counts
+          - generic [ref=e76]:
+            - generic [ref=e77]: ⋮⋮
+            - generic [ref=e78]: Target info
+      - generic [ref=e79]:
+        - generic [ref=e80]:
+          - generic [ref=e81]:
+            - generic [ref=e82]: http://127.0.0.1:5173/overlay/loop
+            - button "Copy loop URL" [ref=e83] [cursor=pointer]: Copy
+          - iframe [ref=e86]:
+            - generic [ref=f1e3]: Loading overlay...
+        - generic [ref=e87]:
+          - generic [ref=e88]:
+            - generic [ref=e89]: http://127.0.0.1:5173/overlay/target-trophy
+            - button "Copy target trophy URL" [ref=e90] [cursor=pointer]: Copy
+          - iframe [ref=e93]:
+            - generic [ref=f2e10]:
+              - heading "Showdown at the Tar Lake" [level=2] [ref=f2e12]
+              - paragraph [ref=f2e13]: Defeat the Lord of the Tar Lake.
+        - generic [ref=e94]:
+          - generic [ref=e95]:
+            - generic [ref=e96]: http://127.0.0.1:5173/overlay/overall
+            - button "Copy overall URL" [ref=e97] [cursor=pointer]: Copy
+          - iframe [ref=e100]:
+            - generic [ref=f3e3]: Loading overlay...
+        - generic [ref=e101]:
+          - generic [ref=e102]:
+            - generic [ref=e103]: http://127.0.0.1:5173/overlay/current-game
+            - button "Copy current game URL" [ref=e104] [cursor=pointer]: Copy
+          - iframe [ref=e107]:
+            - generic [ref=f4e7]:
+              - generic [ref=f4e10]:
+                - strong [ref=f4e11]: 70%
+                - generic [ref=f4e12]: 47 / 55 earned
+              - generic [ref=f4e15]:
+                - strong [ref=f4e18]: 0/1
+                - strong [ref=f4e21]: 0/2
+                - strong [ref=f4e24]: 2/6
+                - strong [ref=f4e27]: 45/46
+    - generic [ref=e108]:
+      - generic [ref=e110]:
+        - generic [ref=e111]:
+          - paragraph [ref=e112]: Advanced Overrides
+          - heading "Custom mode and manual edits" [level=2] [ref=e113]
+        - button "Expand" [ref=e114] [cursor=pointer]
+      - generic [ref=e116]:
+        - generic [ref=e117]:
+          - paragraph [ref=e118]: Debug
+          - heading "Raw payload" [level=2] [ref=e119]
+        - button "Expand" [ref=e120] [cursor=pointer]

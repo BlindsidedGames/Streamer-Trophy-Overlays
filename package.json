@@ -2,13 +2,21 @@
   "name": "streamer-tools",
   "version": "0.1.0",
   "description": "Local PSN trophy lookup test app for streamer overlays.",
+  "main": "build/electron/main.js",
   "scripts": {
     "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "tsx watch server/index.ts",
     "dev:client": "vite",
+    "dev:desktop": "npm run build:server && npm run build:electron && concurrently -k \"npm:dev:client\" \"npm:dev:desktop:app\"",
+    "dev:desktop:app": "cross-env ELECTRON_RENDERER_URL=http://127.0.0.1:5173 electron build/electron/main.js",
+    "generate:icons": "node scripts/generate-icons.mjs",
     "build": "npm run build:client && npm run build:server",
-    "build:client": "tsc -p tsconfig.app.json --noEmit && vite build",
+    "build:client": "npm run generate:icons && tsc -p tsconfig.app.json --noEmit && vite build",
     "build:server": "node -e \"require('node:fs').rmSync('build', { recursive: true, force: true })\" && tsc -p tsconfig.server.json",
+    "build:electron": "npm run generate:icons && tsc -p tsconfig.electron.json",
+    "build:desktop": "npm run build && npm run build:electron",
+    "electron:install-app-deps": "electron-builder install-app-deps",
+    "dist:win": "npm run build:desktop && node scripts/dist-win.mjs",
     "start": "node build/server/index.js",
     "test": "vitest run"
   },
@@ -37,11 +45,50 @@
     "@types/supertest": "^7.2.0",
     "@vitejs/plugin-react": "^6.0.1",
     "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^39.2.0",
+    "electron-builder": "^26.0.12",
     "jsdom": "^29.0.0",
     "supertest": "^7.2.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vite": "^8.0.0",
     "vitest": "^4.1.0"
+  },
+  "build": {
+    "appId": "com.streamertools.psn-overlay-suite",
+    "productName": "PSN Trophy Overlay Suite",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**/*"
+    ],
+    "directories": {
+      "output": "release",
+      "buildResources": "build-assets"
+    },
+    "files": [
+      "build-assets/**/*",
+      "build/electron/**/*",
+      "build/server/**/*",
+      "build/shared/**/*",
+      "dist/**/*",
+      "img/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build-assets/icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    }
   }
 }

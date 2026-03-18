@@ -1,14 +1,23 @@
-import { useDeferredValue, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type ReactNode,
+} from "react";
 
 import type {
   ActiveGameSelection,
-  HealthResponse,
+  OverlayAnchor,
   OverlayDataResponse,
   OverlaySettings,
   PsnTokenStatusResponse,
   TargetTrophySelection,
   TitleSearchResponse,
   TitleSearchResult,
+  StripZoneKey,
   TitleTrophiesResponse,
   TrophyBrowserItem,
   TrophySummaryResponse,
@@ -17,17 +26,21 @@ import type {
 import {
   createDefaultActiveGameSelection,
   createDefaultOverlaySettings,
+  overlayAnchorOptions,
 } from "../shared/contracts.js";
 import { api } from "./api.js";
 import {
   CurrentGameOverlay,
-  DashboardOverlayPreview,
+  EmbeddedOverlayPreview,
   LoopOverlay,
   OverallOverlay,
   TargetTrophyOverlay,
 } from "./components.js";
 
 type ConnectionState = "loading" | "ready" | "error";
+type PsnAccessIssue = "missing" | "invalid" | null;
+type WorkspaceTab = "setup" | "games" | "trophies";
+type DesktopWindowControls = NonNullable<typeof window.streamerToolsDesktop>["windowControls"];
 
 const trophyBrowserGradeIcon: Record<TrophyBrowserItem["grade"], string> = {
   platinum: "/img/40-platinum.png",
@@ -91,7 +104,60 @@ const defaultPsnTokenStatus: PsnTokenStatusResponse = {
 
 const SEARCH_LIMIT = 12;
 const TOKEN_REQUIRED_MESSAGE =
-  "Paste a PSN token above to load titles and trophies.";
+  "Open PSN access to save a token before loading titles and trophies.";
+const PSN_TOKEN_URL = "https://ca.account.sony.com/api/v1/ssocookie";
+const SETTINGS_SAVE_DEBOUNCE_MS = 400;
+const ROUTE_COPY_FEEDBACK_MS = 1600;
+const stripZoneLabels: Record<StripZoneKey, string> = {
+  artwork: "Artwork",
+  identity: "Title and platform",
+  metrics: "Progress and earned totals",
+  trophies: "Trophy counts",
+  targetInfo: "Target info",
+};
+const overlayAnchorLabels: Record<OverlayAnchor, string> = {
+  "top-left": "Top-left",
+  "top-right": "Top-right",
+  "bottom-left": "Bottom-left",
+  "bottom-right": "Bottom-right",
+};
+
+const copyText = async (value: string) => {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+  } catch {
+    // Fall back to the legacy copy path when clipboard access is unavailable.
+  }
+
+  const selection = window.getSelection();
+  const ranges =
+    selection == null
+      ? []
+      : Array.from({ length: selection.rangeCount }, (_, index) => selection.getRangeAt(index));
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  textarea.style.pointerEvents = "none";
+
+  document.body.append(textarea);
+  textarea.focus();
+  textarea.select();
+
+  const copied = typeof document.execCommand === "function"
+    ? document.execCommand("copy")
+    : false;
+
+  document.body.removeChild(textarea);
+  selection?.removeAllRanges();
+  ranges.forEach((range) => selection?.addRange(range));
+
+  return copied;
+};
 
 const resolveSelectedPsnTitleId = (
   nextActiveGame: ActiveGameSelection,
@@ -121,6 +187,55 @@ const extractErrorMessage = (error: unknown, fallback: string) => {
   return fallback;
 };
 
+const extractErrorType = (error: unknown) => {
+  if (typeof error === "object" && error !== null) {
+    if ("type" in error && typeof error.type === "string") {
+      return error.type;
+    }
+
+    if (
+      "error" in error &&
+      typeof error.error === "object" &&
+      error.error !== null &&
+      "type" in error.error &&
+      typeof error.error.type === "string"
+    ) {
+      return error.error.type;
+    }
+  }
+
+  return null;
+};
+
+const resolvePsnAccessIssue = (error: unknown): PsnAccessIssue => {
+  const type = extractErrorType(error);
+  const message = extractErrorMessage(error, "").toLowerCase();
+
+  if (type === "missing_token" || message.includes("missing psn token")) {
+    return "missing";
+  }
+
+  if (type === "psn_auth") {
+    return "invalid";
+  }
+
+  if (
+    type === "invalid_request" &&
+    (message.includes("token") || message.includes("npsso") || message.includes("access code"))
+  ) {
+    return "invalid";
+  }
+
+  if (
+    message.includes("invalid") &&
+    (message.includes("token") || message.includes("npsso") || message.includes("access code"))
+  ) {
+    return "invalid";
+  }
+
+  return null;
+};
+
 const toTargetRequest = (
   npCommunicationId: string,
   trophy: TrophyBrowserItem | null,
@@ -136,6 +251,74 @@ const formatTimestamp = (value: string | null) => {
   }
 
   return new Date(value).toLocaleString();
+};
+
+const moveStripZoneToIndex = (
+  order: StripZoneKey[],
+  sourceZone: StripZoneKey,
+  targetIndex: number,
+) => {
+  const nextOrder = [...order];
+  const sourceIndex = nextOrder.indexOf(sourceZone);
+
+  if (sourceIndex === -1 || targetIndex < 0 || targetIndex > nextOrder.length) {
+    return order;
+  }
+
+  nextOrder.splice(sourceIndex, 1);
+  const insertionIndex = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+
+  if (insertionIndex === sourceIndex) {
+    return order;
+  }
+
+  nextOrder.splice(insertionIndex, 0, sourceZone);
+
+  return nextOrder;
+};
+
+const resolveStripDropIndex = (
+  trackElement: HTMLDivElement,
+  clientX: number,
+) => {
+  const chips = Array.from(
+    trackElement.querySelectorAll<HTMLDivElement>(".strip-order-chip"),
+  );
+
+  if (chips.length === 0) {
+    return 0;
+  }
+
+  for (const [index, chip] of chips.entries()) {
+    const rect = chip.getBoundingClientRect();
+    const midpoint = rect.left + rect.width / 2;
+
+    if (clientX < midpoint) {
+      return index;
+    }
+  }
+
+  return chips.length;
+};
+
+const isStripZoneVisible = (settings: OverlaySettings, zone: StripZoneKey) => {
+  if (zone === "artwork") {
+    return settings.showStripArtwork;
+  }
+
+  if (zone === "identity") {
+    return settings.showStripIdentity;
+  }
+
+  if (zone === "metrics") {
+    return settings.showStripMetrics;
+  }
+
+  if (zone === "targetInfo") {
+    return settings.showTargetTrophyInfo;
+  }
+
+  return settings.showStripTrophies;
 };
 
 export function App() {
@@ -166,7 +349,9 @@ export function App() {
 }
 
 function DashboardApp() {
-  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const desktopRuntime = window.streamerToolsDesktop;
+  const isDesktopRuntime = desktopRuntime?.platform === "desktop";
+  const desktopWindowControls = desktopRuntime?.windowControls;
   const [psnTokenStatus, setPsnTokenStatus] =
     useState<PsnTokenStatusResponse>(defaultPsnTokenStatus);
   const [psnTokenInput, setPsnTokenInput] = useState("");
@@ -192,18 +377,56 @@ function DashboardApp() {
   const [titleSearch, setTitleSearch] = useState<TitleSearchResponse>(defaultTitleSearch);
   const [titleSearchLoading, setTitleSearchLoading] = useState(false);
   const [titleSearchError, setTitleSearchError] = useState<string | null>(null);
+  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("setup");
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
+  const [psnAccessOpen, setPsnAccessOpen] = useState(false);
+  const [psnAccessIssue, setPsnAccessIssue] = useState<PsnAccessIssue>(null);
   const [activeGamePendingId, setActiveGamePendingId] = useState<string | null>(null);
   const [targetPendingKey, setTargetPendingKey] = useState<string | null>(null);
   const [savingAdvancedGame, setSavingAdvancedGame] = useState(false);
-  const [savingSettings, setSavingSettings] = useState(false);
+  const [draggedStripZone, setDraggedStripZone] = useState<StripZoneKey | null>(null);
+  const [dropStripIndex, setDropStripIndex] = useState<number | null>(null);
+  const [copiedRouteKey, setCopiedRouteKey] = useState<string | null>(null);
+  const settingsRef = useRef(settings);
+  const pendingSettingsSaveTimeoutRef = useRef<number | null>(null);
+  const settingsEditVersionRef = useRef(0);
+  const latestSettingsSaveRequestIdRef = useRef(0);
+  const copiedRouteResetTimeoutRef = useRef<number | null>(null);
 
   const overlayUrlBase = useMemo(() => window.location.origin, []);
+  const psnAccessSummaryText =
+    psnAccessIssue === "missing"
+      ? "A saved NPSSO token is required before this control room can load PSN data."
+      : psnAccessIssue === "invalid"
+        ? "The saved token was rejected by PSN. Paste a fresh NPSSO token to continue."
+        : "Update or clear the locally stored NPSSO token for this machine.";
+
+  useEffect(() => {
+    document.body.classList.toggle("modal-open", psnAccessOpen);
+    return () => document.body.classList.remove("modal-open");
+  }, [psnAccessOpen]);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
+  useEffect(
+    () => () => {
+      if (pendingSettingsSaveTimeoutRef.current != null) {
+        window.clearTimeout(pendingSettingsSaveTimeoutRef.current);
+      }
+      if (copiedRouteResetTimeoutRef.current != null) {
+        window.clearTimeout(copiedRouteResetTimeoutRef.current);
+      }
+    },
+    [],
+  );
 
   const fetchTitleTrophiesForGame = async (
     nextActiveGame: ActiveGameSelection,
     nextSummary: TrophySummaryResponse,
+    tokenConfigured = psnTokenStatus.configured,
   ) => {
     const selectedTitleId = resolveSelectedPsnTitleId(nextActiveGame, nextSummary);
 
@@ -213,9 +436,11 @@ function DashboardApp() {
         error:
           nextActiveGame.mode === "custom"
             ? "Trophy targeting is unavailable while custom mode is active."
-            : !psnTokenStatus.configured
+            : !tokenConfigured
               ? TOKEN_REQUIRED_MESSAGE
               : null,
+        psnAccessIssue:
+          nextActiveGame.mode === "custom" || tokenConfigured ? null : ("missing" as const),
       };
     }
 
@@ -223,11 +448,13 @@ function DashboardApp() {
       return {
         response: await api.getTitleTrophies(selectedTitleId),
         error: null,
+        psnAccessIssue: null,
       };
     } catch (error) {
       return {
         response: defaultTitleTrophies,
         error: extractErrorMessage(error, "Unable to load trophies for the selected title."),
+        psnAccessIssue: resolvePsnAccessIssue(error),
       };
     }
   };
@@ -239,15 +466,23 @@ function DashboardApp() {
     setTitleTrophiesLoading(true);
 
     try {
-      const nextState = await fetchTitleTrophiesForGame(nextActiveGame, nextSummary);
+      const nextState = await fetchTitleTrophiesForGame(
+        nextActiveGame,
+        nextSummary,
+        psnTokenStatus.configured,
+      );
       setTitleTrophies(nextState.response);
       setTitleTrophiesError(nextState.error);
+      setPsnAccessIssue(nextState.psnAccessIssue);
+      if (nextState.psnAccessIssue) {
+        setPsnAccessOpen(true);
+      }
     } finally {
       setTitleTrophiesLoading(false);
     }
   };
 
-  const load = async (nextStatusMessage = "Refreshing") => {
+  const load = async (nextStatusMessage = "Refreshing"): Promise<PsnAccessIssue> => {
     setConnectionState("loading");
     setStatusMessage(nextStatusMessage);
 
@@ -272,8 +507,6 @@ function DashboardApp() {
         nextTokenStatusResult.status === "fulfilled"
           ? nextTokenStatusResult.value
           : defaultPsnTokenStatus;
-      const nextHealth =
-        nextHealthResult.status === "fulfilled" ? nextHealthResult.value : null;
       const nextSummary =
         nextSummaryResult.status === "fulfilled"
           ? nextSummaryResult.value
@@ -292,25 +525,52 @@ function DashboardApp() {
           : defaultOverlayData;
 
       setPsnTokenStatus(nextTokenStatus);
-      setHealth(nextHealth);
       setSummary(nextSummary);
       setSettings(nextSettings);
       setActiveGame(nextActiveGame);
       setOverlayData(nextOverlayData);
 
-      let titleTrophyState = {
+      let titleTrophyState: {
+        response: TitleTrophiesResponse;
+        error: string | null;
+        psnAccessIssue: PsnAccessIssue;
+      } = {
         response: defaultTitleTrophies,
         error: nextTokenStatus.configured ? null : TOKEN_REQUIRED_MESSAGE,
+        psnAccessIssue: nextTokenStatus.configured ? null : ("missing" as const),
       };
 
       if (nextSummaryResult.status === "fulfilled") {
         setTitleTrophiesLoading(true);
-        titleTrophyState = await fetchTitleTrophiesForGame(nextActiveGame, nextSummary);
+        titleTrophyState = await fetchTitleTrophiesForGame(
+          nextActiveGame,
+          nextSummary,
+          nextTokenStatus.configured,
+        );
         setTitleTrophiesLoading(false);
       }
 
       setTitleTrophies(titleTrophyState.response);
       setTitleTrophiesError(titleTrophyState.error);
+      const nextPsnAccessIssue =
+        (!nextTokenStatus.configured
+          ? "missing"
+          : null) ??
+        titleTrophyState.psnAccessIssue ??
+        [
+          nextHealthResult.status === "rejected" ? nextHealthResult.reason : null,
+          nextSummaryResult.status === "rejected" ? nextSummaryResult.reason : null,
+          nextSettingsResult.status === "rejected" ? nextSettingsResult.reason : null,
+          nextActiveGameResult.status === "rejected" ? nextActiveGameResult.reason : null,
+          nextOverlayDataResult.status === "rejected" ? nextOverlayDataResult.reason : null,
+        ]
+          .map(resolvePsnAccessIssue)
+          .find((issue): issue is Exclude<PsnAccessIssue, null> => issue !== null) ??
+        null;
+      setPsnAccessIssue(nextPsnAccessIssue);
+      if (nextPsnAccessIssue) {
+        setPsnAccessOpen(true);
+      }
       setDebugPayload({
         tokenStatus:
           nextTokenStatusResult.status === "fulfilled"
@@ -341,8 +601,8 @@ function DashboardApp() {
 
       if (!nextTokenStatus.configured) {
         setConnectionState("error");
-        setStatusMessage("Token required");
-        return;
+        setStatusMessage("PSN access required");
+        return nextPsnAccessIssue;
       }
 
       if (
@@ -363,16 +623,23 @@ function DashboardApp() {
         setStatusMessage(
           extractErrorMessage(firstError, titleTrophyState.error ?? "Unable to load PSN data."),
         );
-        return;
+        return nextPsnAccessIssue;
       }
 
       setConnectionState("ready");
       setStatusMessage("Connected");
+      return nextPsnAccessIssue;
     } catch (error) {
       setDebugPayload(error);
       setConnectionState("error");
       setStatusMessage("Error");
       setTitleTrophiesLoading(false);
+      const nextPsnAccessIssue = resolvePsnAccessIssue(error);
+      setPsnAccessIssue(nextPsnAccessIssue);
+      if (nextPsnAccessIssue) {
+        setPsnAccessOpen(true);
+      }
+      return nextPsnAccessIssue;
     }
   };
 
@@ -383,7 +650,7 @@ function DashboardApp() {
   useEffect(() => {
     let cancelled = false;
 
-    if (deferredSearchQuery.length < 2) {
+    if (!deferredSearchQuery) {
       setTitleSearch(defaultTitleSearch);
       setTitleSearchError(null);
       setTitleSearchLoading(false);
@@ -438,12 +705,23 @@ function DashboardApp() {
     );
   }, [selectedPsnTitleId, summary.titles, titleTrophies.title]);
 
-  const selectedTitleOutsideRecent = Boolean(
-    selectedPsnTitle &&
-      !summary.titles.some(
+  const isSearchMode = searchQuery.trim().length > 0;
+  const visibleTitleList = isSearchMode ? titleSearch.results : summary.titles;
+  const visibleBrowseTitles = useMemo(() => {
+    if (
+      activeGame.mode === "psn" &&
+      selectedPsnTitle &&
+      !visibleTitleList.some(
         (title) => title.npCommunicationId === selectedPsnTitle.npCommunicationId,
-      ),
-  );
+      )
+    ) {
+      return [selectedPsnTitle, ...visibleTitleList];
+    }
+
+    return visibleTitleList;
+  }, [activeGame.mode, selectedPsnTitle, visibleTitleList]);
+  const trophyBrowserAvailable =
+    activeGame.mode === "psn" && selectedPsnTitleId != null;
 
   const currentTargetSelectionKey = titleTrophies.target
     ? `${titleTrophies.target.trophyGroupId}:${titleTrophies.target.trophyId}`
@@ -480,23 +758,112 @@ function DashboardApp() {
     () => formatTimestamp(psnTokenStatus.updatedAt),
     [psnTokenStatus.updatedAt],
   );
+  const openPsnTokenPage = () => {
+    window.open(PSN_TOKEN_URL, "_blank", "noopener,noreferrer");
+  };
 
-  const saveSettings = async () => {
-    setSavingSettings(true);
+  useEffect(() => {
+    if (workspaceTab === "trophies" && !trophyBrowserAvailable) {
+      setWorkspaceTab("games");
+    }
+  }, [trophyBrowserAvailable, workspaceTab]);
+
+  const clearPendingSettingsSave = () => {
+    if (pendingSettingsSaveTimeoutRef.current != null) {
+      window.clearTimeout(pendingSettingsSaveTimeoutRef.current);
+      pendingSettingsSaveTimeoutRef.current = null;
+    }
+  };
+
+  const persistSettings = async (
+    nextSettings: OverlaySettings,
+    editVersion: number,
+  ) => {
+    const requestId = latestSettingsSaveRequestIdRef.current + 1;
+    latestSettingsSaveRequestIdRef.current = requestId;
     setStatusMessage("Saving display settings");
 
     try {
-      const nextSettings = await api.saveSettings(settings);
-      setSettings(nextSettings);
+      const persistedSettings = await api.saveSettings(nextSettings);
       const nextOverlayData = await api.getOverlayData();
+
+      if (requestId !== latestSettingsSaveRequestIdRef.current) {
+        return;
+      }
+
       setOverlayData(nextOverlayData);
+
+      if (settingsEditVersionRef.current !== editVersion) {
+        return;
+      }
+
+      settingsRef.current = persistedSettings;
+      setSettings(persistedSettings);
       setStatusMessage("Display settings saved");
     } catch (error) {
+      if (
+        requestId !== latestSettingsSaveRequestIdRef.current ||
+        settingsEditVersionRef.current !== editVersion
+      ) {
+        return;
+      }
+
+      const nextPsnAccessIssue = resolvePsnAccessIssue(error);
+      setPsnAccessIssue(nextPsnAccessIssue);
+      if (nextPsnAccessIssue) {
+        setPsnAccessOpen(true);
+      }
       setStatusMessage("Display settings failed");
       setDebugPayload(error);
-    } finally {
-      setSavingSettings(false);
     }
+  };
+
+  const updateSettingsWithPersistence = (
+    applyChange: (current: OverlaySettings) => OverlaySettings,
+    persistence: "debounced" | "immediate",
+  ) => {
+    const currentSettings = settingsRef.current;
+    const nextSettings = applyChange(currentSettings);
+
+    if (nextSettings === currentSettings) {
+      return;
+    }
+
+    settingsEditVersionRef.current += 1;
+    const editVersion = settingsEditVersionRef.current;
+
+    settingsRef.current = nextSettings;
+    setSettings(nextSettings);
+
+    clearPendingSettingsSave();
+
+    if (persistence === "immediate") {
+      void persistSettings(nextSettings, editVersion);
+      return;
+    }
+
+    pendingSettingsSaveTimeoutRef.current = window.setTimeout(() => {
+      pendingSettingsSaveTimeoutRef.current = null;
+      void persistSettings(nextSettings, editVersion);
+    }, SETTINGS_SAVE_DEBOUNCE_MS);
+  };
+
+  const copyRouteUrl = async (routeKey: string, url: string) => {
+    const copied = await copyText(url);
+
+    if (!copied) {
+      return;
+    }
+
+    if (copiedRouteResetTimeoutRef.current != null) {
+      window.clearTimeout(copiedRouteResetTimeoutRef.current);
+    }
+
+    setCopiedRouteKey(routeKey);
+    copiedRouteResetTimeoutRef.current = window.setTimeout(() => {
+      setCopiedRouteKey((current) => (current === routeKey ? null : current));
+      copiedRouteResetTimeoutRef.current = null;
+    }, ROUTE_COPY_FEEDBACK_MS);
   };
 
   const selectTitle = async (title: { npCommunicationId: string; titleName: string }) => {
@@ -535,6 +902,7 @@ function DashboardApp() {
       setTitleTrophies(nextTitleTrophies);
       setTitleTrophiesError(null);
       setStatusMessage("Active game updated");
+      setWorkspaceTab("trophies");
       setSearchQuery("");
       setTitleSearch(defaultTitleSearch);
     } catch (error) {
@@ -543,6 +911,11 @@ function DashboardApp() {
       setTitleTrophiesError(
         extractErrorMessage(error, "Unable to switch the active game."),
       );
+      const nextPsnAccessIssue = resolvePsnAccessIssue(error);
+      setPsnAccessIssue(nextPsnAccessIssue);
+      if (nextPsnAccessIssue) {
+        setPsnAccessOpen(true);
+      }
       setStatusMessage("Active game update failed");
       setDebugPayload(error);
     } finally {
@@ -570,6 +943,11 @@ function DashboardApp() {
       setStatusMessage("Advanced overrides saved");
       setAdvancedOpen(false);
     } catch (error) {
+      const nextPsnAccessIssue = resolvePsnAccessIssue(error);
+      setPsnAccessIssue(nextPsnAccessIssue);
+      if (nextPsnAccessIssue) {
+        setPsnAccessOpen(true);
+      }
       setStatusMessage("Advanced overrides failed");
       setDebugPayload(error);
     } finally {
@@ -616,6 +994,11 @@ function DashboardApp() {
         ...current,
         target: previousTarget,
       }));
+      const nextPsnAccessIssue = resolvePsnAccessIssue(error);
+      setPsnAccessIssue(nextPsnAccessIssue);
+      if (nextPsnAccessIssue) {
+        setPsnAccessOpen(true);
+      }
       setStatusMessage("Current trophy update failed");
       setDebugPayload(error);
     } finally {
@@ -632,7 +1015,10 @@ function DashboardApp() {
       const nextTokenStatus = await api.savePsnToken(psnTokenInput);
       setPsnTokenStatus(nextTokenStatus);
       setPsnTokenInput("");
-      await load("Refreshing after token save");
+      const nextPsnAccessIssue = await load("Refreshing after token save");
+      if (!nextPsnAccessIssue) {
+        setPsnAccessOpen(false);
+      }
     } catch (error) {
       setPsnTokenError(
         extractErrorMessage(error, "Unable to save the PSN token locally."),
@@ -654,6 +1040,7 @@ function DashboardApp() {
       setPsnTokenStatus(nextTokenStatus);
       setPsnTokenInput("");
       await load("Refreshing after token clear");
+      setPsnAccessOpen(true);
     } catch (error) {
       setPsnTokenError(
         extractErrorMessage(error, "Unable to clear the saved PSN token."),
@@ -692,29 +1079,994 @@ function DashboardApp() {
     }
   };
 
-  return (
-    <div className="dashboard-shell">
-      <header className="hero-card">
-        <div>
-          <p className="eyebrow">Streamer Tools</p>
-          <h1>PSN Trophy Control Room</h1>
-          <p className="hero-copy">
-            Pick the active game visually, browse its trophies, and pin the one
-            you want on stream without dropping into the override form by
-            default.
-          </p>
-        </div>
-        <div className={`status-pill status-${connectionState}`}>{statusMessage}</div>
-      </header>
+  const reorderStripZones = (sourceZone: StripZoneKey, targetIndex: number) => {
+    updateSettingsWithPersistence((current) => {
+      const nextOrder = moveStripZoneToIndex(
+        current.stripZoneOrder,
+        sourceZone,
+        targetIndex,
+      );
 
-      <section className="panel token-panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">PSN Access</p>
-            <h2>Local token storage</h2>
+      if (nextOrder === current.stripZoneOrder) {
+        return current;
+      }
+
+      return {
+        ...current,
+        stripZoneOrder: nextOrder,
+      };
+    }, "immediate");
+  };
+
+  const previewStripZoneOrder =
+    draggedStripZone != null && dropStripIndex != null
+      ? moveStripZoneToIndex(settings.stripZoneOrder, draggedStripZone, dropStripIndex)
+      : settings.stripZoneOrder;
+
+  const handleStripTrackDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!draggedStripZone) {
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+
+    const nextIndex = resolveStripDropIndex(event.currentTarget, event.clientX);
+
+    if (dropStripIndex !== nextIndex) {
+      setDropStripIndex(nextIndex);
+    }
+  };
+
+  const handleStripTrackDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+
+    const sourceZone =
+      (event.dataTransfer.getData("text/plain") as StripZoneKey) || draggedStripZone;
+
+    if (sourceZone) {
+      reorderStripZones(
+        sourceZone,
+        resolveStripDropIndex(event.currentTarget, event.clientX),
+      );
+    }
+
+    setDraggedStripZone(null);
+    setDropStripIndex(null);
+  };
+
+  return (
+    <>
+      {psnAccessOpen ? (
+        <PsnAccessModal
+          issue={psnAccessIssue}
+          summaryText={psnAccessSummaryText}
+          psnTokenStatusLabel={psnTokenStatusLabel}
+          psnTokenUpdatedLabel={psnTokenUpdatedLabel}
+          psnTokenStatus={psnTokenStatus}
+          psnTokenInput={psnTokenInput}
+          savingPsnToken={savingPsnToken}
+          clearingPsnToken={clearingPsnToken}
+          psnTokenError={psnTokenError}
+          onTokenInputChange={setPsnTokenInput}
+          onOpenTokenPage={openPsnTokenPage}
+          onSave={() => void savePsnToken()}
+          onClear={() => void clearPsnToken()}
+          onClose={() => setPsnAccessOpen(false)}
+        />
+      ) : null}
+
+      <div className={`dashboard-app ${isDesktopRuntime ? "dashboard-app-desktop" : ""}`}>
+        <DashboardTopBar
+          isDesktopRuntime={isDesktopRuntime}
+          desktopWindowControls={desktopWindowControls}
+          trophyBrowserAvailable={trophyBrowserAvailable}
+          workspaceTab={workspaceTab}
+          currentTargetSelectionKey={currentTargetSelectionKey}
+          targetPendingKey={targetPendingKey}
+          onSelectSetup={() => setWorkspaceTab("setup")}
+          onSelectGames={() => setWorkspaceTab("games")}
+          onSelectTrophies={() => setWorkspaceTab("trophies")}
+          onClearTarget={() => void updateTargetTrophy(null)}
+          onOpenPsnAccess={() => setPsnAccessOpen(true)}
+          onRefresh={() => void load()}
+        />
+
+        <div className="dashboard-scroll-region">
+        <div className="dashboard-shell">
+
+        {workspaceTab === "setup" ? (
+          <section
+            className="workspace-panel"
+            id="workspace-panel-setup"
+            role="tabpanel"
+            aria-labelledby="workspace-tab-setup"
+          >
+            <section className="workspace-subpanel setup-config-preview-surface">
+              <div className="workspace-subpanel-header">
+                <h3>Config and preview</h3>
+              </div>
+
+              <div className="setup-controls-stack">
+                <div className="setup-config-rail">
+                  <div className="editor-grid setup-config-fields">
+                    <NumberField
+                      label="Overall duration (ms)"
+                      value={settings.overallDurationMs}
+                      onChange={(value) =>
+                        updateSettingsWithPersistence((current) => {
+                          const nextValue = value ?? current.overallDurationMs;
+                          return nextValue === current.overallDurationMs
+                            ? current
+                            : {
+                                ...current,
+                                overallDurationMs: nextValue,
+                              };
+                        }, "debounced")
+                      }
+                    />
+                    <NumberField
+                      label="Current game duration (ms)"
+                      value={settings.currentGameDurationMs}
+                      onChange={(value) =>
+                        updateSettingsWithPersistence((current) => {
+                          const nextValue = value ?? current.currentGameDurationMs;
+                          return nextValue === current.currentGameDurationMs
+                            ? current
+                            : {
+                                ...current,
+                                currentGameDurationMs: nextValue,
+                              };
+                        }, "debounced")
+                      }
+                    />
+                    <NumberField
+                      label="Target trophy duration (ms)"
+                      value={settings.targetTrophyDurationMs}
+                      onChange={(value) =>
+                        updateSettingsWithPersistence((current) => {
+                          const nextValue = value ?? current.targetTrophyDurationMs;
+                          return nextValue === current.targetTrophyDurationMs
+                            ? current
+                            : {
+                                ...current,
+                                targetTrophyDurationMs: nextValue,
+                              };
+                        }, "debounced")
+                      }
+                    />
+                    <TextField
+                      label="Target trophy tag text"
+                      value={settings.targetTrophyTagText}
+                      onChange={(value) =>
+                        updateSettingsWithPersistence((current) =>
+                          value === current.targetTrophyTagText
+                            ? current
+                            : {
+                                ...current,
+                                targetTrophyTagText: value,
+                              }, "debounced")
+                      }
+                    />
+                    <SelectField
+                      label="Overlay anchor"
+                      value={settings.overlayAnchor}
+                      options={overlayAnchorOptions.map((anchor) => ({
+                        value: anchor,
+                        label: overlayAnchorLabels[anchor],
+                      }))}
+                      onChange={(value) =>
+                        updateSettingsWithPersistence((current) =>
+                          value === current.overlayAnchor
+                            ? current
+                            : {
+                                ...current,
+                                overlayAnchor: value,
+                              }, "immediate")
+                      }
+                    />
+                  </div>
+
+                  <div className="toggle-grid settings-toggle-grid">
+                    <ToggleField
+                      label="Show artwork"
+                      checked={settings.showStripArtwork}
+                      onChange={(checked) =>
+                        updateSettingsWithPersistence((current) =>
+                          checked === current.showStripArtwork
+                            ? current
+                            : {
+                                ...current,
+                                showStripArtwork: checked,
+                              }, "immediate")
+                      }
+                    />
+                    <ToggleField
+                      label="Show title and platform"
+                      checked={settings.showStripIdentity}
+                      onChange={(checked) =>
+                        updateSettingsWithPersistence((current) =>
+                          checked === current.showStripIdentity
+                            ? current
+                            : {
+                                ...current,
+                                showStripIdentity: checked,
+                              }, "immediate")
+                      }
+                    />
+                    <ToggleField
+                      label="Show progress and earned totals"
+                      checked={settings.showStripMetrics}
+                      onChange={(checked) =>
+                        updateSettingsWithPersistence((current) =>
+                          checked === current.showStripMetrics
+                            ? current
+                            : {
+                                ...current,
+                                showStripMetrics: checked,
+                              }, "immediate")
+                      }
+                    />
+                    <ToggleField
+                      label="Show trophy counts"
+                      checked={settings.showStripTrophies}
+                      onChange={(checked) =>
+                        updateSettingsWithPersistence((current) =>
+                          checked === current.showStripTrophies
+                            ? current
+                            : {
+                                ...current,
+                                showStripTrophies: checked,
+                              }, "immediate")
+                      }
+                    />
+                    <ToggleField
+                      label="Show target trophy in loop"
+                      checked={settings.showTargetTrophyInLoop}
+                      onChange={(checked) =>
+                        updateSettingsWithPersistence((current) =>
+                          checked === current.showTargetTrophyInLoop
+                            ? current
+                            : {
+                                ...current,
+                                showTargetTrophyInLoop: checked,
+                              }, "immediate")
+                      }
+                    />
+                    <ToggleField
+                      label="Show target trophy tag"
+                      checked={settings.showTargetTrophyTag}
+                      onChange={(checked) =>
+                        updateSettingsWithPersistence((current) =>
+                          checked === current.showTargetTrophyTag
+                            ? current
+                            : {
+                                ...current,
+                                showTargetTrophyTag: checked,
+                              }, "immediate")
+                      }
+                    />
+                    <ToggleField
+                      label="Show target info"
+                      checked={settings.showTargetTrophyInfo}
+                      onChange={(checked) =>
+                        updateSettingsWithPersistence((current) =>
+                          checked === current.showTargetTrophyInfo
+                            ? current
+                            : {
+                                ...current,
+                                showTargetTrophyInfo: checked,
+                              }, "immediate")
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="strip-order-rail">
+                  <div
+                    className={`strip-order-track ${draggedStripZone ? "is-dragging" : ""} ${
+                      dropStripIndex === 0 ? "is-drop-start" : ""
+                    } ${
+                      dropStripIndex === settings.stripZoneOrder.length ? "is-drop-end" : ""
+                    }`}
+                    aria-label="Strip section order"
+                    onDragOver={handleStripTrackDragOver}
+                    onDrop={handleStripTrackDrop}
+                  >
+                    {settings.stripZoneOrder.map((zone) => {
+                      const currentIndex = settings.stripZoneOrder.indexOf(zone);
+                      const previewIndex = previewStripZoneOrder.indexOf(zone);
+                      const shiftClass =
+                        previewIndex < currentIndex
+                          ? "is-shift-left"
+                          : previewIndex > currentIndex
+                            ? "is-shift-right"
+                            : "";
+
+                      return (
+                        <div
+                          className={`strip-order-chip ${
+                            draggedStripZone === zone ? "is-dragging" : ""
+                          } ${
+                            !isStripZoneVisible(settings, zone) ? "is-muted" : ""
+                          } ${shiftClass} ${
+                            draggedStripZone !== zone &&
+                            dropStripIndex != null &&
+                            dropStripIndex === currentIndex
+                              ? "is-drop-before"
+                              : ""
+                          } ${
+                            draggedStripZone !== zone &&
+                            dropStripIndex != null &&
+                            dropStripIndex === currentIndex + 1
+                              ? "is-drop-after"
+                              : ""
+                          }`}
+                          data-strip-zone={zone}
+                          draggable
+                          key={zone}
+                          onDragStart={(event) => {
+                            event.dataTransfer.effectAllowed = "move";
+                            event.dataTransfer.setData("text/plain", zone);
+                            setDraggedStripZone(zone);
+                            setDropStripIndex(settings.stripZoneOrder.indexOf(zone));
+                          }}
+                          onDragEnd={() => {
+                            setDraggedStripZone(null);
+                            setDropStripIndex(null);
+                          }}
+                        >
+                          <span className="strip-order-handle" aria-hidden="true">
+                            ⋮⋮
+                          </span>
+                          <span className="strip-order-chip-label">{stripZoneLabels[zone]}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="setup-preview-stack">
+                <div className="overlay-preview-block">
+                  <RouteRow
+                    copied={copiedRouteKey === "loop"}
+                    copyLabel="Copy loop URL"
+                    onCopy={() => void copyRouteUrl("loop", `${overlayUrlBase}/overlay/loop`)}
+                    url={`${overlayUrlBase}/overlay/loop`}
+                  />
+                  <EmbeddedOverlayPreview
+                    title="Loop preview"
+                    srcPath="/overlay/loop"
+                    overlayData={overlayData}
+                    settings={settings}
+                    viewportHeight={220}
+                  />
+                </div>
+
+                <div className="overlay-preview-block">
+                  <RouteRow
+                    copied={copiedRouteKey === "target-trophy"}
+                    copyLabel="Copy target trophy URL"
+                    onCopy={() =>
+                      void copyRouteUrl("target-trophy", `${overlayUrlBase}/overlay/target-trophy`)
+                    }
+                    url={`${overlayUrlBase}/overlay/target-trophy`}
+                  />
+                  <EmbeddedOverlayPreview
+                    title="Target trophy preview"
+                    srcPath="/overlay/target-trophy"
+                    overlayData={overlayData}
+                    settings={settings}
+                    viewportHeight={220}
+                  />
+                </div>
+
+                <div className="overlay-preview-block">
+                  <RouteRow
+                    copied={copiedRouteKey === "overall"}
+                    copyLabel="Copy overall URL"
+                    onCopy={() => void copyRouteUrl("overall", `${overlayUrlBase}/overlay/overall`)}
+                    url={`${overlayUrlBase}/overlay/overall`}
+                  />
+                  <EmbeddedOverlayPreview
+                    title="Overall preview"
+                    srcPath="/overlay/overall"
+                    overlayData={overlayData}
+                    settings={settings}
+                    viewportHeight={220}
+                  />
+                </div>
+
+                <div className="overlay-preview-block">
+                  <RouteRow
+                    copied={copiedRouteKey === "current-game"}
+                    copyLabel="Copy current game URL"
+                    onCopy={() =>
+                      void copyRouteUrl("current-game", `${overlayUrlBase}/overlay/current-game`)
+                    }
+                    url={`${overlayUrlBase}/overlay/current-game`}
+                  />
+                  <EmbeddedOverlayPreview
+                    title="Current game preview"
+                    srcPath="/overlay/current-game"
+                    overlayData={overlayData}
+                    settings={settings}
+                    viewportHeight={220}
+                  />
+                </div>
+              </div>
+            </section>
+
+            <div className="setup-advanced-stack">
+              <CollapsibleSection
+                eyebrow="Advanced Overrides"
+                title="Custom mode and manual edits"
+                open={advancedOpen}
+                onToggle={() => setAdvancedOpen((current) => !current)}
+              >
+                <div className="advanced-mode-actions">
+                  <button
+                    className={`ghost-button ${activeGame.mode === "psn" ? "is-active" : ""}`}
+                    onClick={() =>
+                      setActiveGame((current) => ({
+                        ...current,
+                        mode: "psn",
+                        selectedNpCommunicationId:
+                          current.selectedNpCommunicationId ??
+                          summary.titles[0]?.npCommunicationId ??
+                          null,
+                      }))
+                    }
+                  >
+                    Use PSN title
+                  </button>
+                  <button
+                    className={`ghost-button ${activeGame.mode === "custom" ? "is-active" : ""}`}
+                    onClick={() =>
+                      setActiveGame((current) => ({
+                        ...current,
+                        mode: "custom",
+                      }))
+                    }
+                  >
+                    Use custom game
+                  </button>
+                </div>
+
+                <div className="editor-grid">
+                  <TextField
+                    label="Title override"
+                    value={activeGame.override.titleName ?? ""}
+                    onChange={(value) =>
+                      setActiveGame((current) => ({
+                        ...current,
+                        override: {
+                          ...current.override,
+                          titleName: value || null,
+                        },
+                      }))
+                    }
+                  />
+                  <TextField
+                    label="Icon URL override"
+                    value={activeGame.override.iconUrl ?? ""}
+                    onChange={(value) =>
+                      setActiveGame((current) => ({
+                        ...current,
+                        override: {
+                          ...current.override,
+                          iconUrl: value || null,
+                        },
+                      }))
+                    }
+                  />
+                  <TextField
+                    label="Platform override"
+                    value={activeGame.override.platform ?? ""}
+                    onChange={(value) =>
+                      setActiveGame((current) => ({
+                        ...current,
+                        override: {
+                          ...current.override,
+                          platform: value || null,
+                        },
+                      }))
+                    }
+                  />
+                  <NumberField
+                    label="Completion % override"
+                    value={activeGame.override.completionPercentage}
+                    onChange={(value) =>
+                      setActiveGame((current) => ({
+                        ...current,
+                        override: {
+                          ...current.override,
+                          completionPercentage: value,
+                        },
+                      }))
+                    }
+                  />
+                </div>
+
+                <div className="counts-editor">
+                  {(["platinum", "gold", "silver", "bronze"] as const).map((grade) => (
+                    <div className="count-editor-card" key={grade}>
+                      <h3>{grade}</h3>
+                      <NumberField
+                        label="Earned override"
+                        value={activeGame.override.earnedCounts[grade]}
+                        onChange={(value) =>
+                          setActiveGame((current) => ({
+                            ...current,
+                            override: {
+                              ...current.override,
+                              earnedCounts: {
+                                ...current.override.earnedCounts,
+                                [grade]: value,
+                              },
+                            },
+                          }))
+                        }
+                      />
+                      <NumberField
+                        label="Total override"
+                        value={activeGame.override.definedCounts[grade]}
+                        onChange={(value) =>
+                          setActiveGame((current) => ({
+                            ...current,
+                            override: {
+                              ...current.override,
+                              definedCounts: {
+                                ...current.override.definedCounts,
+                                [grade]: value,
+                              },
+                            },
+                          }))
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  className="action-button"
+                  disabled={savingAdvancedGame}
+                  onClick={() => void saveAdvancedGame()}
+                >
+                  {savingAdvancedGame ? "Saving…" : "Save advanced overrides"}
+                </button>
+              </CollapsibleSection>
+
+              <CollapsibleSection
+                eyebrow="Debug"
+                title="Raw payload"
+                open={debugOpen}
+                onToggle={() => setDebugOpen((current) => !current)}
+              >
+                <pre className="debug-panel">{JSON.stringify(debugPayload, null, 2)}</pre>
+              </CollapsibleSection>
+            </div>
+          </section>
+        ) : null}
+
+        {workspaceTab === "games" ? (
+          <section
+            className="workspace-panel"
+            id="workspace-panel-games"
+            role="tabpanel"
+            aria-labelledby="workspace-tab-games"
+          >
+            <div className="title-browser-surface">
+              {activeGame.mode === "custom" ? (
+                <p className="panel-footnote">
+                  Custom mode is active. Select a PSN title here to switch back, or adjust manual
+                  values in Setup.
+                </p>
+              ) : null}
+
+              <div className="search-toolbar">
+                <label className="field search-field">
+                  <span>Search older PSN titles</span>
+                  <input
+                    type="search"
+                    placeholder="Start typing a title name"
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                  />
+                </label>
+              </div>
+
+              <div className="search-results-header">
+                <p className="section-caption">
+                  {isSearchMode
+                    ? `Search results${titleSearch.totalItemCount > 0 ? ` (${titleSearch.totalItemCount})` : ""}`
+                    : "Recent titles"}
+                </p>
+              </div>
+
+              {isSearchMode ? (
+                <>
+                  {titleSearchLoading && titleSearch.results.length === 0 ? (
+                    <p className="panel-empty">Searching trophy history…</p>
+                  ) : null}
+                  {titleSearchError ? <p className="panel-error">{titleSearchError}</p> : null}
+                  {!titleSearchLoading &&
+                  !titleSearchError &&
+                  titleSearch.results.length === 0 ? (
+                    <p className="panel-empty">
+                      No titles matched that search. Your current selection stays as-is.
+                    </p>
+                  ) : null}
+                </>
+              ) : null}
+
+              {!isSearchMode && visibleBrowseTitles.length === 0 ? (
+                <p className="panel-empty">No recent titles are available yet.</p>
+              ) : null}
+
+              {visibleBrowseTitles.length > 0 ? (
+                <div className="title-picker-grid">
+                  {visibleBrowseTitles.map((title) => (
+                    <TitlePickerCard
+                      key={`visible-${title.npCommunicationId}`}
+                      title={title}
+                      active={
+                        activeGame.mode === "psn" &&
+                        selectedPsnTitleId === title.npCommunicationId
+                      }
+                      pending={activeGamePendingId === title.npCommunicationId}
+                      onSelect={() => void selectTitle(title)}
+                    />
+                  ))}
+                </div>
+              ) : null}
+
+              {isSearchMode && titleSearch.nextOffset != null ? (
+                <button
+                  className="ghost-button"
+                  disabled={titleSearchLoading}
+                  onClick={() => void loadMoreSearchResults()}
+                >
+                  {titleSearchLoading ? "Loading…" : "Load more"}
+                </button>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
+
+        {workspaceTab === "trophies" && trophyBrowserAvailable ? (
+          <section
+            className="workspace-panel"
+            id="workspace-panel-trophies"
+            role="tabpanel"
+            aria-labelledby="workspace-tab-trophies"
+          >
+            <div className="trophy-browser-surface">
+              {activeGame.mode === "custom" ? (
+                <p className="panel-empty">
+                  Switch back to a PSN title to browse and target trophies.
+                </p>
+              ) : titleTrophiesLoading ? (
+                <p className="panel-empty">Loading trophies…</p>
+              ) : titleTrophiesError ? (
+                <p className="panel-error">{titleTrophiesError}</p>
+              ) : titleTrophies.trophies.length === 0 ? (
+                <p className="panel-empty">
+                  No trophies are available for the selected title.
+                </p>
+              ) : (
+                <div className="trophy-browser-stack">
+                  {currentTargetTrophy ? (
+                    <div className="trophy-pinned">
+                      <p className="section-caption">Pinned target</p>
+                      <TrophyCard
+                        trophy={currentTargetTrophy}
+                        active
+                        featured
+                        pending={targetPendingKey === currentTargetSelectionKey}
+                        onSelect={() => void updateTargetTrophy(currentTargetTrophy)}
+                      />
+                    </div>
+                  ) : null}
+
+                  {unearnedTrophies.length > 0 ? (
+                    <div className="trophy-section">
+                      <p className="section-caption">Unearned trophies</p>
+                      <div className="trophy-card-grid">
+                        {unearnedTrophies.map((trophy) => {
+                          const trophyKey = `${trophy.trophyGroupId}:${trophy.trophyId}`;
+                          return (
+                            <TrophyCard
+                              key={trophyKey}
+                              trophy={trophy}
+                              active={currentTargetSelectionKey === trophyKey}
+                              pending={targetPendingKey === trophyKey}
+                              onSelect={() => void updateTargetTrophy(trophy)}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {earnedTrophies.length > 0 ? (
+                    <div className="trophy-section">
+                      <p className="section-caption">Earned trophies</p>
+                      <div className="trophy-card-grid">
+                        {earnedTrophies.map((trophy) => {
+                          const trophyKey = `${trophy.trophyGroupId}:${trophy.trophyId}`;
+                          return (
+                            <TrophyCard
+                              key={trophyKey}
+                              trophy={trophy}
+                              active={currentTargetSelectionKey === trophyKey}
+                              pending={targetPendingKey === trophyKey}
+                              onSelect={() => void updateTargetTrophy(trophy)}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          </section>
+        ) : null}
+      </div>
+      </div>
+      </div>
+    </>
+  );
+}
+
+function DashboardTopBar({
+  isDesktopRuntime,
+  desktopWindowControls,
+  trophyBrowserAvailable,
+  workspaceTab,
+  currentTargetSelectionKey,
+  targetPendingKey,
+  onSelectSetup,
+  onSelectGames,
+  onSelectTrophies,
+  onClearTarget,
+  onOpenPsnAccess,
+  onRefresh,
+}: {
+  isDesktopRuntime: boolean;
+  desktopWindowControls?: DesktopWindowControls;
+  trophyBrowserAvailable: boolean;
+  workspaceTab: WorkspaceTab;
+  currentTargetSelectionKey: string | null;
+  targetPendingKey: string | null;
+  onSelectSetup: () => void;
+  onSelectGames: () => void;
+  onSelectTrophies: () => void;
+  onClearTarget: () => void;
+  onOpenPsnAccess: () => void;
+  onRefresh: () => void;
+}) {
+  const [isMaximized, setIsMaximized] = useState(false);
+
+  useEffect(() => {
+    if (!isDesktopRuntime || !desktopWindowControls) {
+      return;
+    }
+
+    let disposed = false;
+
+    void desktopWindowControls.isMaximized().then((nextIsMaximized) => {
+      if (!disposed) {
+        setIsMaximized(nextIsMaximized);
+      }
+    });
+
+    const unsubscribe = desktopWindowControls.onMaximizedChange((nextIsMaximized) => {
+      setIsMaximized(nextIsMaximized);
+    });
+
+    return () => {
+      disposed = true;
+      unsubscribe();
+    };
+  }, [desktopWindowControls, isDesktopRuntime]);
+
+  return (
+    <header className={`app-topbar ${isDesktopRuntime ? "app-topbar-desktop" : ""}`}>
+      <div className="app-topbar-frame">
+        <div className="app-topbar-shell">
+          <div className="app-topbar-brand">
+            <img className="app-topbar-brand-icon" src="/favicon.png" alt="" />
+            <div className="app-topbar-brand-copy">
+              <p className="app-topbar-brand-kicker">Streamer Tools</p>
+              <p className="app-topbar-brand-title">PSN Trophy Overlay Suite</p>
+            </div>
           </div>
-          <span className="panel-tag">{psnTokenStatusLabel}</span>
+
+          <div className="app-topbar-navigation">
+            <div className="workspace-tabs" role="tablist" aria-label="Dashboard workspace">
+              <button
+                id="workspace-tab-setup"
+                className={`workspace-tab ${workspaceTab === "setup" ? "is-active" : ""}`}
+                role="tab"
+                type="button"
+                aria-selected={workspaceTab === "setup"}
+                aria-controls="workspace-panel-setup"
+                onClick={onSelectSetup}
+              >
+                Setup
+              </button>
+              <button
+                id="workspace-tab-games"
+                className={`workspace-tab ${workspaceTab === "games" ? "is-active" : ""}`}
+                role="tab"
+                type="button"
+                aria-selected={workspaceTab === "games"}
+                aria-controls="workspace-panel-games"
+                onClick={onSelectGames}
+              >
+                Game Selection
+              </button>
+              {trophyBrowserAvailable ? (
+                <button
+                  id="workspace-tab-trophies"
+                  className={`workspace-tab ${workspaceTab === "trophies" ? "is-active" : ""}`}
+                  role="tab"
+                  type="button"
+                  aria-selected={workspaceTab === "trophies"}
+                  aria-controls="workspace-panel-trophies"
+                  onClick={onSelectTrophies}
+                >
+                  Trophy Browser
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="app-topbar-drag-lane" aria-hidden="true" />
+
+          <div className="app-topbar-actions">
+            {workspaceTab === "trophies" && currentTargetSelectionKey ? (
+              <button
+                className="ghost-button"
+                disabled={targetPendingKey === "clear"}
+                onClick={onClearTarget}
+              >
+                Clear target
+              </button>
+            ) : null}
+            <button className="ghost-button" onClick={onOpenPsnAccess}>
+              PSN access
+            </button>
+            <button className="action-button" onClick={onRefresh}>
+              Refresh all
+            </button>
+          </div>
         </div>
+
+        {isDesktopRuntime && desktopWindowControls ? (
+          <div className="app-topbar-window-controls" aria-label="Window controls">
+            <button
+              className="app-window-control"
+              type="button"
+              aria-label="Minimize window"
+              onClick={() => desktopWindowControls.minimize()}
+            >
+              <span aria-hidden="true" className="app-window-control-glyph">
+                _
+              </span>
+            </button>
+            <button
+              className="app-window-control"
+              type="button"
+              aria-label={isMaximized ? "Restore window" : "Maximize window"}
+              onClick={() => desktopWindowControls.maximizeOrRestore()}
+            >
+              <span
+                aria-hidden="true"
+                className={`app-window-control-glyph app-window-control-glyph-square ${
+                  isMaximized ? "is-restored" : ""
+                }`}
+              />
+            </button>
+            <button
+              className="app-window-control app-window-control-close"
+              type="button"
+              aria-label="Close window"
+              onClick={() => desktopWindowControls.close()}
+            >
+              <span aria-hidden="true" className="app-window-control-glyph">
+                ×
+              </span>
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </header>
+  );
+}
+
+function PsnAccessModal({
+  issue,
+  summaryText,
+  psnTokenStatusLabel,
+  psnTokenUpdatedLabel,
+  psnTokenStatus,
+  psnTokenInput,
+  savingPsnToken,
+  clearingPsnToken,
+  psnTokenError,
+  onTokenInputChange,
+  onOpenTokenPage,
+  onSave,
+  onClear,
+  onClose,
+}: {
+  issue: PsnAccessIssue;
+  summaryText: string;
+  psnTokenStatusLabel: string;
+  psnTokenUpdatedLabel: string;
+  psnTokenStatus: PsnTokenStatusResponse;
+  psnTokenInput: string;
+  savingPsnToken: boolean;
+  clearingPsnToken: boolean;
+  psnTokenError: string | null;
+  onTokenInputChange: (value: string) => void;
+  onOpenTokenPage: () => void;
+  onSave: () => void;
+  onClear: () => void;
+  onClose: () => void;
+}) {
+  const introText =
+    "Save an NPSSO token locally on this machine so the control room can load PSN data.";
+  const storageLabel =
+    psnTokenStatus.storage === "local-file" ? "Local file" : psnTokenStatus.storage;
+
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section
+        className="panel token-panel token-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="psn-access-title"
+        aria-describedby="psn-access-summary"
+      >
+        <button
+          className="token-modal-close"
+          type="button"
+          aria-label="Close PSN access"
+          onClick={onClose}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 6 18 18" />
+            <path d="M18 6 6 18" />
+          </svg>
+        </button>
+
+        <div className="token-modal-header">
+          <div className="token-modal-heading">
+            <p className="eyebrow">PSN Access</p>
+            <div className="token-modal-title-row">
+              <h2 id="psn-access-title">Local token storage</h2>
+              <span className="token-modal-status">{psnTokenStatusLabel}</span>
+            </div>
+            <p id="psn-access-summary" className="token-modal-copy">
+              {introText}
+            </p>
+          </div>
+        </div>
+
+        {issue ? (
+          <section
+            className={`token-modal-callout ${issue === "invalid" ? "is-error" : ""}`}
+            aria-label="PSN access status"
+          >
+            <p className="token-modal-callout-label">Connection status</p>
+            <p className={issue === "invalid" ? "panel-error" : undefined}>{summaryText}</p>
+          </section>
+        ) : null}
 
         <div className="token-panel-grid">
           <label className="field token-field">
@@ -724,572 +2076,58 @@ function DashboardApp() {
               autoComplete="off"
               placeholder="Paste your NPSSO token"
               value={psnTokenInput}
-              onChange={(event) => setPsnTokenInput(event.target.value)}
+              onChange={(event) => onTokenInputChange(event.target.value)}
             />
           </label>
 
           <div className="token-actions">
             <button
-              className="action-button"
+              className="token-modal-button token-modal-button-secondary"
+              type="button"
+              onClick={onOpenTokenPage}
+            >
+              Open token page
+            </button>
+            <button
+              className="token-modal-button token-modal-button-primary"
+              type="button"
               disabled={savingPsnToken || clearingPsnToken || psnTokenInput.trim().length === 0}
-              onClick={() => void savePsnToken()}
+              onClick={onSave}
             >
               {savingPsnToken ? "Saving…" : "Save token"}
             </button>
             <button
-              className="ghost-button"
+              className="token-modal-button token-modal-button-destructive"
+              type="button"
               disabled={savingPsnToken || clearingPsnToken || !psnTokenStatus.configured}
-              onClick={() => void clearPsnToken()}
+              onClick={onClear}
             >
               {clearingPsnToken ? "Clearing…" : "Clear token"}
             </button>
           </div>
         </div>
 
-        <dl className="runtime-grid token-status-grid">
-          <div>
+        <dl className="token-status-strip">
+          <div className="token-status-card">
             <dt>Status</dt>
             <dd>{psnTokenStatusLabel}</dd>
           </div>
-          <div>
+          <div className="token-status-card">
             <dt>Storage</dt>
-            <dd>{psnTokenStatus.storage}</dd>
+            <dd>{storageLabel}</dd>
           </div>
-          <div>
+          <div className="token-status-card">
             <dt>Updated</dt>
             <dd>{psnTokenUpdatedLabel}</dd>
           </div>
         </dl>
 
-        <p className="panel-footnote">
+        <p className="panel-footnote token-storage-note">
           Stored only on this machine in <code>~/.streamer-tools/psn-credentials.json</code>.
           The saved token is never returned to this page.
         </p>
-        {psnTokenError ? <p className="panel-error">{psnTokenError}</p> : null}
+        {psnTokenError ? <p className="panel-error token-modal-error">{psnTokenError}</p> : null}
       </section>
-
-      <section className="panel-grid dashboard-top-grid">
-        <article className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Connection</p>
-              <h2>Runtime and routes</h2>
-            </div>
-            <button className="action-button" onClick={() => void load()}>
-              Refresh all
-            </button>
-          </div>
-
-          <dl className="runtime-grid">
-            <div>
-              <dt>Source</dt>
-              <dd>{health?.source ?? "psn-api"}</dd>
-            </div>
-            <div>
-              <dt>Configured</dt>
-              <dd>{health?.configured ? "Yes" : "No"}</dd>
-            </div>
-            <div>
-              <dt>Fetched</dt>
-              <dd>{summary.meta.fetchedAt || "Not yet loaded"}</dd>
-            </div>
-            <div>
-              <dt>Warnings</dt>
-              <dd>{summary.meta.warnings.length}</dd>
-            </div>
-          </dl>
-
-          <div className="route-list">
-            <span>{overlayUrlBase}/overlay/loop</span>
-            <span>{overlayUrlBase}/overlay/overall</span>
-            <span>{overlayUrlBase}/overlay/current-game</span>
-            <span>{overlayUrlBase}/overlay/target-trophy</span>
-          </div>
-        </article>
-
-        <article className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Display Settings</p>
-              <h2>Loop timing and visibility</h2>
-            </div>
-            <button
-              className="action-button"
-              disabled={savingSettings}
-              onClick={() => void saveSettings()}
-            >
-              {savingSettings ? "Saving…" : "Save settings"}
-            </button>
-          </div>
-
-          <div className="editor-grid">
-            <NumberField
-              label="Overall duration (ms)"
-              value={settings.overallDurationMs}
-              onChange={(value) =>
-                setSettings((current) => ({
-                  ...current,
-                  overallDurationMs: value ?? current.overallDurationMs,
-                }))
-              }
-            />
-            <NumberField
-              label="Current game duration (ms)"
-              value={settings.currentGameDurationMs}
-              onChange={(value) =>
-                setSettings((current) => ({
-                  ...current,
-                  currentGameDurationMs: value ?? current.currentGameDurationMs,
-                }))
-              }
-            />
-            <NumberField
-              label="Target trophy duration (ms)"
-              value={settings.targetTrophyDurationMs}
-              onChange={(value) =>
-                setSettings((current) => ({
-                  ...current,
-                  targetTrophyDurationMs: value ?? current.targetTrophyDurationMs,
-                }))
-              }
-            />
-            <TextField
-              label="Target trophy tag text"
-              value={settings.targetTrophyTagText}
-              onChange={(value) =>
-                setSettings((current) => ({
-                  ...current,
-                  targetTrophyTagText: value,
-                }))
-              }
-            />
-          </div>
-
-          <div className="toggle-grid settings-toggle-grid">
-            <ToggleField
-              label="Show grade rows"
-              checked={settings.showGradeRows}
-              onChange={(checked) =>
-                setSettings((current) => ({ ...current, showGradeRows: checked }))
-              }
-            />
-            <ToggleField
-              label="Show overall completion"
-              checked={settings.showOverallCompletion}
-              onChange={(checked) =>
-                setSettings((current) => ({
-                  ...current,
-                  showOverallCompletion: checked,
-                }))
-              }
-            />
-            <ToggleField
-              label="Show current completion"
-              checked={settings.showCurrentCompletion}
-              onChange={(checked) =>
-                setSettings((current) => ({
-                  ...current,
-                  showCurrentCompletion: checked,
-                }))
-              }
-            />
-            <ToggleField
-              label="Show current totals"
-              checked={settings.showCurrentTotals}
-              onChange={(checked) =>
-                setSettings((current) => ({ ...current, showCurrentTotals: checked }))
-              }
-            />
-            <ToggleField
-              label="Show target trophy in loop"
-              checked={settings.showTargetTrophyInLoop}
-              onChange={(checked) =>
-                setSettings((current) => ({
-                  ...current,
-                  showTargetTrophyInLoop: checked,
-                }))
-              }
-            />
-            <ToggleField
-              label="Show target trophy tag"
-              checked={settings.showTargetTrophyTag}
-              onChange={(checked) =>
-                setSettings((current) => ({
-                  ...current,
-                  showTargetTrophyTag: checked,
-                }))
-              }
-            />
-          </div>
-        </article>
-      </section>
-
-      <section className="panel live-preview-panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">Live Preview</p>
-            <h2>HUD and target trophy</h2>
-          </div>
-        </div>
-
-        <div className="live-preview-grid">
-          <article className="preview-card">
-            <p className="section-caption">Target trophy</p>
-            <DashboardOverlayPreview
-              overlayData={overlayData}
-              mode="targetTrophy"
-              settingsOverride={settings}
-            />
-          </article>
-          <article className="preview-card">
-            <p className="section-caption">Main HUD</p>
-            <DashboardOverlayPreview
-              overlayData={overlayData}
-              mode="currentGame"
-              settingsOverride={settings}
-            />
-          </article>
-        </div>
-      </section>
-
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">Active Game Selection</p>
-            <h2>Recent titles and older-title search</h2>
-          </div>
-          <div className="panel-header-actions">
-            {activeGame.mode === "custom" ? (
-              <span className="panel-tag">Custom mode active</span>
-            ) : null}
-            <button
-              className="ghost-button"
-              onClick={() => {
-                setAdvancedOpen(true);
-                setActiveGame((current) => ({ ...current, mode: "custom" }));
-              }}
-            >
-              Use custom game
-            </button>
-          </div>
-        </div>
-
-        <div className="search-toolbar">
-          <label className="field search-field">
-            <span>Search older PSN titles</span>
-            <input
-              type="search"
-              placeholder="Start typing a title name"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-            />
-          </label>
-        </div>
-
-        {selectedTitleOutsideRecent && selectedPsnTitle ? (
-          <div className="selected-library-wrap">
-            <p className="section-caption">Selected from library</p>
-            <TitlePickerCard
-              title={selectedPsnTitle}
-              active
-              pending={activeGamePendingId === selectedPsnTitle.npCommunicationId}
-              onSelect={() => void selectTitle(selectedPsnTitle)}
-            />
-          </div>
-        ) : null}
-
-        <div className="title-picker-grid">
-          {summary.titles.map((title) => (
-            <TitlePickerCard
-              key={title.npCommunicationId}
-              title={title}
-              active={
-                activeGame.mode === "psn" &&
-                selectedPsnTitleId === title.npCommunicationId
-              }
-              pending={activeGamePendingId === title.npCommunicationId}
-              onSelect={() => void selectTitle(title)}
-            />
-          ))}
-        </div>
-
-        {deferredSearchQuery.length >= 2 ? (
-          <div className="search-results-panel">
-            <div className="search-results-header">
-              <p className="section-caption">
-                Search results
-                {titleSearch.totalItemCount > 0
-                  ? ` (${titleSearch.totalItemCount})`
-                  : ""}
-              </p>
-            </div>
-
-            {titleSearchLoading && titleSearch.results.length === 0 ? (
-              <p className="panel-empty">Searching trophy history…</p>
-            ) : null}
-            {titleSearchError ? <p className="panel-error">{titleSearchError}</p> : null}
-            {!titleSearchLoading &&
-            !titleSearchError &&
-            titleSearch.results.length === 0 ? (
-              <p className="panel-empty">
-                No titles matched that search. Your current selection stays as-is.
-              </p>
-            ) : null}
-            <div className="search-results-grid">
-              {titleSearch.results.map((title) => (
-                <SearchResultCard
-                  key={`search-${title.npCommunicationId}`}
-                  title={title}
-                  active={
-                    activeGame.mode === "psn" &&
-                    selectedPsnTitleId === title.npCommunicationId
-                  }
-                  pending={activeGamePendingId === title.npCommunicationId}
-                  onSelect={() => void selectTitle(title)}
-                />
-              ))}
-            </div>
-
-            {titleSearch.nextOffset != null ? (
-              <button
-                className="ghost-button"
-                disabled={titleSearchLoading}
-                onClick={() => void loadMoreSearchResults()}
-              >
-                {titleSearchLoading ? "Loading…" : "Load more"}
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-      </section>
-
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">Trophy Browser</p>
-            <h2>{selectedPsnTitle?.titleName ?? "Select a PSN title"}</h2>
-          </div>
-          {currentTargetSelectionKey ? (
-            <button
-              className="ghost-button"
-              disabled={targetPendingKey === "clear"}
-              onClick={() => void updateTargetTrophy(null)}
-            >
-              Clear target
-            </button>
-          ) : null}
-        </div>
-
-        {activeGame.mode === "custom" ? (
-          <p className="panel-empty">
-            Switch back to a PSN title to browse and target trophies.
-          </p>
-        ) : titleTrophiesLoading ? (
-          <p className="panel-empty">Loading trophies…</p>
-        ) : titleTrophiesError ? (
-          <p className="panel-error">{titleTrophiesError}</p>
-        ) : titleTrophies.trophies.length === 0 ? (
-          <p className="panel-empty">
-            No trophies are available for the selected title.
-          </p>
-        ) : (
-          <div className="trophy-list">
-            {currentTargetTrophy ? (
-              <div className="trophy-pinned">
-                <p className="section-caption">Pinned target</p>
-                <TrophyRow
-                  trophy={currentTargetTrophy}
-                  active
-                  pending={targetPendingKey === currentTargetSelectionKey}
-                  onSelect={() => void updateTargetTrophy(currentTargetTrophy)}
-                />
-              </div>
-            ) : null}
-
-            {unearnedTrophies.length > 0 ? (
-              <div className="trophy-section">
-                <p className="section-caption">Unearned trophies</p>
-                {unearnedTrophies.map((trophy) => {
-                  const trophyKey = `${trophy.trophyGroupId}:${trophy.trophyId}`;
-                  return (
-                    <TrophyRow
-                      key={trophyKey}
-                      trophy={trophy}
-                      active={currentTargetSelectionKey === trophyKey}
-                      pending={targetPendingKey === trophyKey}
-                      onSelect={() => void updateTargetTrophy(trophy)}
-                    />
-                  );
-                })}
-              </div>
-            ) : null}
-
-            {earnedTrophies.length > 0 ? (
-              <div className="trophy-section">
-                <p className="section-caption">Earned trophies</p>
-                {earnedTrophies.map((trophy) => {
-                  const trophyKey = `${trophy.trophyGroupId}:${trophy.trophyId}`;
-                  return (
-                    <TrophyRow
-                      key={trophyKey}
-                      trophy={trophy}
-                      active={currentTargetSelectionKey === trophyKey}
-                      pending={targetPendingKey === trophyKey}
-                      onSelect={() => void updateTargetTrophy(trophy)}
-                    />
-                  );
-                })}
-              </div>
-            ) : null}
-          </div>
-        )}
-      </section>
-
-      <CollapsibleSection
-        eyebrow="Advanced Overrides"
-        title="Custom mode and manual edits"
-        open={advancedOpen}
-        onToggle={() => setAdvancedOpen((current) => !current)}
-      >
-        <div className="advanced-mode-actions">
-          <button
-            className={`ghost-button ${activeGame.mode === "psn" ? "is-active" : ""}`}
-            onClick={() =>
-              setActiveGame((current) => ({
-                ...current,
-                mode: "psn",
-                selectedNpCommunicationId:
-                  current.selectedNpCommunicationId ?? summary.titles[0]?.npCommunicationId ?? null,
-              }))
-            }
-          >
-            Use PSN title
-          </button>
-          <button
-            className={`ghost-button ${activeGame.mode === "custom" ? "is-active" : ""}`}
-            onClick={() =>
-              setActiveGame((current) => ({
-                ...current,
-                mode: "custom",
-              }))
-            }
-          >
-            Use custom game
-          </button>
-        </div>
-
-        <div className="editor-grid">
-          <TextField
-            label="Title override"
-            value={activeGame.override.titleName ?? ""}
-            onChange={(value) =>
-              setActiveGame((current) => ({
-                ...current,
-                override: {
-                  ...current.override,
-                  titleName: value || null,
-                },
-              }))
-            }
-          />
-          <TextField
-            label="Icon URL override"
-            value={activeGame.override.iconUrl ?? ""}
-            onChange={(value) =>
-              setActiveGame((current) => ({
-                ...current,
-                override: {
-                  ...current.override,
-                  iconUrl: value || null,
-                },
-              }))
-            }
-          />
-          <TextField
-            label="Platform override"
-            value={activeGame.override.platform ?? ""}
-            onChange={(value) =>
-              setActiveGame((current) => ({
-                ...current,
-                override: {
-                  ...current.override,
-                  platform: value || null,
-                },
-              }))
-            }
-          />
-          <NumberField
-            label="Completion % override"
-            value={activeGame.override.completionPercentage}
-            onChange={(value) =>
-              setActiveGame((current) => ({
-                ...current,
-                override: {
-                  ...current.override,
-                  completionPercentage: value,
-                },
-              }))
-            }
-          />
-        </div>
-
-        <div className="counts-editor">
-          {(["platinum", "gold", "silver", "bronze"] as const).map((grade) => (
-            <div className="count-editor-card" key={grade}>
-              <h3>{grade}</h3>
-              <NumberField
-                label="Earned override"
-                value={activeGame.override.earnedCounts[grade]}
-                onChange={(value) =>
-                  setActiveGame((current) => ({
-                    ...current,
-                    override: {
-                      ...current.override,
-                      earnedCounts: {
-                        ...current.override.earnedCounts,
-                        [grade]: value,
-                      },
-                    },
-                  }))
-                }
-              />
-              <NumberField
-                label="Total override"
-                value={activeGame.override.definedCounts[grade]}
-                onChange={(value) =>
-                  setActiveGame((current) => ({
-                    ...current,
-                    override: {
-                      ...current.override,
-                      definedCounts: {
-                        ...current.override.definedCounts,
-                        [grade]: value,
-                      },
-                    },
-                  }))
-                }
-              />
-            </div>
-          ))}
-        </div>
-
-        <button
-          className="action-button"
-          disabled={savingAdvancedGame}
-          onClick={() => void saveAdvancedGame()}
-        >
-          {savingAdvancedGame ? "Saving…" : "Save advanced overrides"}
-        </button>
-      </CollapsibleSection>
-
-      <CollapsibleSection
-        eyebrow="Debug"
-        title="Raw payload"
-        open={debugOpen}
-        onToggle={() => setDebugOpen((current) => !current)}
-      >
-        <pre className="debug-panel">{JSON.stringify(debugPayload, null, 2)}</pre>
-      </CollapsibleSection>
     </div>
   );
 }
@@ -1308,14 +2146,14 @@ function CollapsibleSection({
   children: ReactNode;
 }) {
   return (
-    <section className="panel collapsible-panel">
+    <section className="collapsible-panel">
       <div className="panel-header">
         <div>
           <p className="eyebrow">{eyebrow}</p>
           <h2>{title}</h2>
         </div>
-        <button className="ghost-button" onClick={onToggle}>
-          {open ? "Hide" : "Show"}
+        <button className="ghost-button" type="button" aria-expanded={open} onClick={onToggle}>
+          {open ? "Collapse" : "Expand"}
         </button>
       </div>
 
@@ -1390,36 +2228,38 @@ function SearchResultCard({
   );
 }
 
-function TrophyRow({
+function TrophyCard({
   trophy,
   active,
+  featured = false,
   pending,
   onSelect,
 }: {
   trophy: TrophyBrowserItem;
   active: boolean;
+  featured?: boolean;
   pending: boolean;
   onSelect: () => void;
 }) {
   return (
     <button
       type="button"
-      className={`trophy-row ${active ? "trophy-row-active" : ""} ${
-        trophy.earned ? "trophy-row-earned" : ""
-      }`}
+      className={`trophy-card ${featured ? "trophy-card-featured" : ""} ${
+        active ? "trophy-card-active" : ""
+      } ${trophy.earned ? "trophy-card-earned" : ""}`}
       onClick={onSelect}
       disabled={pending}
     >
       {trophy.iconUrl ? (
-        <img className="trophy-row-icon" src={trophy.iconUrl} alt="" />
+        <img className="trophy-card-icon" src={trophy.iconUrl} alt="" />
       ) : (
-        <div className="trophy-row-icon trophy-row-icon-placeholder" aria-hidden="true" />
+        <div className="trophy-card-icon trophy-card-icon-placeholder" aria-hidden="true" />
       )}
-      <div className="trophy-row-copy">
-        <div className="trophy-row-head">
-          <div className="trophy-row-title">
+      <div className="trophy-card-copy">
+        <div className="trophy-card-head">
+          <div className="trophy-card-title">
             <img
-              className="trophy-row-grade-icon"
+              className="trophy-card-grade-icon"
               src={trophyBrowserGradeIcon[trophy.grade]}
               alt=""
             />
@@ -1436,6 +2276,32 @@ function TrophyRow({
         <p>{trophy.description ?? "No trophy description is available."}</p>
       </div>
     </button>
+  );
+}
+
+function RouteRow({
+  copied,
+  copyLabel,
+  onCopy,
+  url,
+}: {
+  copied: boolean;
+  copyLabel: string;
+  onCopy: () => void;
+  url: string;
+}) {
+  return (
+    <div className="route-row">
+      <span className="route-row-text">{url}</span>
+      <button
+        type="button"
+        className="route-copy-button"
+        aria-label={copyLabel}
+        onClick={onCopy}
+      >
+        {copied ? "Copied" : "Copy"}
+      </button>
+    </div>
   );
 }
 
@@ -1475,6 +2341,33 @@ function NumberField({
           onChange(event.target.value === "" ? null : Number(event.target.value))
         }
       />
+    </label>
+  );
+}
+
+function SelectField<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (value: T) => void;
+}) {
+  return (
+    <label className="field select-field">
+      <span>{label}</span>
+      <div className="select-field-control">
+        <select value={value} onChange={(event) => onChange(event.target.value as T)}>
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
     </label>
   );
 }

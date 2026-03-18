@@ -143,15 +143,35 @@ export interface UpdatePsnTokenRequest {
   token: string;
 }
 
+export const defaultStripZoneOrder = [
+  "artwork",
+  "identity",
+  "metrics",
+  "trophies",
+  "targetInfo",
+] as const;
+
+export type StripZoneKey = (typeof defaultStripZoneOrder)[number];
+export const overlayAnchorOptions = [
+  "top-left",
+  "top-right",
+  "bottom-left",
+  "bottom-right",
+] as const;
+export type OverlayAnchor = (typeof overlayAnchorOptions)[number];
+
 export interface OverlaySettings {
   overallDurationMs: number;
   currentGameDurationMs: number;
   targetTrophyDurationMs: number;
-  showGradeRows: boolean;
-  showOverallCompletion: boolean;
-  showCurrentCompletion: boolean;
-  showCurrentTotals: boolean;
+  showStripArtwork: boolean;
+  showStripIdentity: boolean;
+  showStripMetrics: boolean;
+  showStripTrophies: boolean;
+  stripZoneOrder: StripZoneKey[];
   showTargetTrophyInLoop: boolean;
+  overlayAnchor: OverlayAnchor;
+  showTargetTrophyInfo: boolean;
   showTargetTrophyTag: boolean;
   targetTrophyTagText: string;
   updatedAt: string;
@@ -260,11 +280,14 @@ export const createDefaultOverlaySettings = (): OverlaySettings => ({
   overallDurationMs: 5000,
   currentGameDurationMs: 12000,
   targetTrophyDurationMs: 12000,
-  showGradeRows: true,
-  showOverallCompletion: true,
-  showCurrentCompletion: true,
-  showCurrentTotals: true,
+  showStripArtwork: true,
+  showStripIdentity: true,
+  showStripMetrics: true,
+  showStripTrophies: true,
+  stripZoneOrder: [...defaultStripZoneOrder],
   showTargetTrophyInLoop: false,
+  overlayAnchor: "bottom-left",
+  showTargetTrophyInfo: true,
   showTargetTrophyTag: true,
   targetTrophyTagText: "Current Target",
   updatedAt: new Date(0).toISOString(),

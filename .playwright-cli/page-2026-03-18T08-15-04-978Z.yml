@@ -1,0 +1,151 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e8]:
+        - paragraph [ref=e9]: Streamer Tools
+        - paragraph [ref=e10]: PSN Trophy Overlay Suite
+      - tablist "Dashboard workspace" [ref=e12]:
+        - tab "Setup" [selected] [ref=e13] [cursor=pointer]
+        - tab "Game Selection" [ref=e14] [cursor=pointer]
+        - tab "Trophy Browser" [ref=e125] [cursor=pointer]
+      - generic [ref=e16]:
+        - button "PSN access" [ref=e17] [cursor=pointer]
+        - button "Refresh all" [ref=e18] [cursor=pointer]
+  - tabpanel "Setup" [ref=e21]:
+    - generic [ref=e22]:
+      - heading "Config and preview" [level=3] [ref=e24]
+      - generic [ref=e25]:
+        - generic [ref=e26]:
+          - generic [ref=e27]:
+            - generic [ref=e28]:
+              - generic [ref=e29]: Overall duration (ms)
+              - spinbutton "Overall duration (ms)" [ref=e30]: "1000"
+            - generic [ref=e31]:
+              - generic [ref=e32]: Current game duration (ms)
+              - spinbutton "Current game duration (ms)" [ref=e33]: "1000"
+            - generic [ref=e34]:
+              - generic [ref=e35]: Target trophy duration (ms)
+              - spinbutton "Target trophy duration (ms)" [ref=e36]: "1000"
+            - generic [ref=e37]:
+              - generic [ref=e38]: Target trophy tag text
+              - textbox "Target trophy tag text" [ref=e39]: Current Target
+            - generic [ref=e40]:
+              - generic [ref=e41]: Overlay anchor
+              - combobox "Overlay anchor" [ref=e43]:
+                - option "Top-left"
+                - option "Top-right" [selected]
+                - option "Bottom-left"
+                - option "Bottom-right"
+          - generic [ref=e44]:
+            - generic [ref=e45]:
+              - checkbox "Show artwork" [checked] [ref=e46]
+              - generic [ref=e47]: Show artwork
+            - generic [ref=e48]:
+              - checkbox "Show title and platform" [checked] [ref=e49]
+              - generic [ref=e50]: Show title and platform
+            - generic [ref=e51]:
+              - checkbox "Show progress and earned totals" [checked] [ref=e52]
+              - generic [ref=e53]: Show progress and earned totals
+            - generic [ref=e54]:
+              - checkbox "Show trophy counts" [checked] [ref=e55]
+              - generic [ref=e56]: Show trophy counts
+            - generic [ref=e57]:
+              - checkbox "Show target trophy in loop" [checked] [ref=e58]
+              - generic [ref=e59]: Show target trophy in loop
+            - generic [ref=e60]:
+              - checkbox "Show target trophy tag" [ref=e61]
+              - generic [ref=e62]: Show target trophy tag
+            - generic [ref=e63]:
+              - checkbox "Show target info" [checked] [ref=e64]
+              - generic [ref=e65]: Show target info
+        - generic "Strip section order" [ref=e67]:
+          - generic [ref=e68]:
+            - generic [ref=e69]: ⋮⋮
+            - generic [ref=e70]: Artwork
+          - generic [ref=e71]:
+            - generic [ref=e72]: ⋮⋮
+            - generic [ref=e73]: Title and platform
+          - generic [ref=e74]:
+            - generic [ref=e75]: ⋮⋮
+            - generic [ref=e76]: Progress and earned totals
+          - generic [ref=e80]:
+            - generic [ref=e81]: ⋮⋮
+            - generic [ref=e82]: Target info
+          - generic [ref=e77]:
+            - generic [ref=e78]: ⋮⋮
+            - generic [ref=e79]: Trophy counts
+      - generic [ref=e83]:
+        - generic [ref=e84]:
+          - generic [ref=e85]:
+            - generic [ref=e86]: http://127.0.0.1:5183/overlay/loop
+            - button "Copy loop URL" [ref=e87] [cursor=pointer]: Copy
+          - iframe [ref=e90]:
+            - generic [ref=f1e6]:
+              - generic [ref=f1e37]:
+                - heading "Showdown at the Tar Lake" [level=2] [ref=f1e39]
+                - paragraph [ref=f1e40]: Defeat the Lord of the Tar Lake.
+              - generic [ref=f1e43]:
+                - generic [ref=f1e46]:
+                  - 'heading "DEATH STRANDING 2: ON THE BEACH" [level=2] [ref=f1e47]'
+                  - generic [ref=f1e48]: PS5
+                - generic [ref=f1e49]:
+                  - strong [ref=f1e50]: 70%
+                  - generic [ref=f1e51]: 47 / 55 earned
+                - generic [ref=f1e54]:
+                  - strong [ref=f1e57]: 0/1
+                  - strong [ref=f1e60]: 0/2
+                  - strong [ref=f1e63]: 2/6
+                  - strong [ref=f1e66]: 45/46
+        - generic [ref=e91]:
+          - generic [ref=e92]:
+            - generic [ref=e93]: http://127.0.0.1:5183/overlay/target-trophy
+            - button "Copy target trophy URL" [ref=e94] [cursor=pointer]: Copy
+          - iframe [ref=e97]:
+            - generic [ref=f2e10]:
+              - heading "Showdown at the Tar Lake" [level=2] [ref=f2e12]
+              - paragraph [ref=f2e13]: Defeat the Lord of the Tar Lake.
+        - generic [ref=e98]:
+          - generic [ref=e99]:
+            - generic [ref=e100]: http://127.0.0.1:5183/overlay/overall
+            - button "Copy overall URL" [ref=e101] [cursor=pointer]: Copy
+          - iframe [ref=e104]:
+            - generic [ref=f3e7]:
+              - generic [ref=f3e10]:
+                - heading "Vathreon" [level=2] [ref=f3e11]
+                - generic [ref=f3e12]: PSN Profile
+              - generic [ref=f3e13]:
+                - strong [ref=f3e14]: 2,848
+                - generic [ref=f3e15]: Level progress 66%
+              - generic [ref=f3e18]:
+                - strong [ref=f3e21]: "50"
+                - strong [ref=f3e24]: "367"
+                - strong [ref=f3e27]: "503"
+                - strong [ref=f3e30]: 1,928
+        - generic [ref=e105]:
+          - generic [ref=e106]:
+            - generic [ref=e107]: http://127.0.0.1:5183/overlay/current-game
+            - button "Copy current game URL" [ref=e108] [cursor=pointer]: Copy
+          - iframe [ref=e111]:
+            - generic [ref=f4e7]:
+              - generic [ref=f4e10]:
+                - 'heading "DEATH STRANDING 2: ON THE BEACH" [level=2] [ref=f4e11]'
+                - generic [ref=f4e12]: PS5
+              - generic [ref=f4e13]:
+                - strong [ref=f4e14]: 70%
+                - generic [ref=f4e15]: 47 / 55 earned
+              - generic [ref=f4e18]:
+                - strong [ref=f4e21]: 0/1
+                - strong [ref=f4e24]: 0/2
+                - strong [ref=f4e27]: 2/6
+                - strong [ref=f4e30]: 45/46
+    - generic [ref=e112]:
+      - generic [ref=e114]:
+        - generic [ref=e115]:
+          - paragraph [ref=e116]: Advanced Overrides
+          - heading "Custom mode and manual edits" [level=2] [ref=e117]
+        - button "Expand" [ref=e118] [cursor=pointer]
+      - generic [ref=e120]:
+        - generic [ref=e121]:
+          - paragraph [ref=e122]: Debug
+          - heading "Raw payload" [level=2] [ref=e123]
+        - button "Expand" [ref=e124] [cursor=pointer]

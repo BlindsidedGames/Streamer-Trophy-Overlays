@@ -1,0 +1,163 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - tablist "Dashboard workspace" [ref=e6]:
+        - tab "Setup" [ref=e7] [cursor=pointer]
+        - tab "Game Selection" [active] [selected] [ref=e8] [cursor=pointer]
+        - tab "Trophy Browser" [ref=e24] [cursor=pointer]
+      - generic [ref=e9]:
+        - button "PSN access" [ref=e10] [cursor=pointer]
+        - button "Refresh all" [ref=e11] [cursor=pointer]
+    - heading "Recent titles and older-title search" [level=2] [ref=e14]
+  - tabpanel "Game Selection" [ref=e558]:
+    - generic [ref=e559]:
+      - generic [ref=e561]:
+        - generic [ref=e562]: Search older PSN titles
+        - searchbox "Search older PSN titles" [ref=e563]
+      - paragraph [ref=e565]: Recent titles
+      - generic [ref=e566]:
+        - button "Lawn Mowing Simulator PS5 8% complete" [ref=e567] [cursor=pointer]:
+          - generic [ref=e568]:
+            - generic [ref=e569]:
+              - heading "Lawn Mowing Simulator" [level=3] [ref=e570]
+              - generic [ref=e571]: PS5
+            - generic [ref=e573]: 8% complete
+        - 'button "Bluey: The Videogame PS5 100% complete" [ref=e574] [cursor=pointer]':
+          - generic [ref=e575]:
+            - generic [ref=e576]:
+              - 'heading "Bluey: The Videogame" [level=3] [ref=e577]'
+              - generic [ref=e578]: PS5
+            - generic [ref=e580]: 100% complete
+        - button "Bus Simulator 21 PS5 1% complete" [ref=e581] [cursor=pointer]:
+          - generic [ref=e582]:
+            - generic [ref=e583]:
+              - heading "Bus Simulator 21" [level=3] [ref=e584]
+              - generic [ref=e585]: PS5
+            - generic [ref=e587]: 1% complete
+        - button "Disney•Pixar WALL-E PS5 1% complete" [ref=e588] [cursor=pointer]:
+          - generic [ref=e589]:
+            - generic [ref=e590]:
+              - heading "Disney•Pixar WALL-E" [level=3] [ref=e591]
+              - generic [ref=e592]: PS5
+            - generic [ref=e594]: 1% complete
+        - button "The Last of Us™ Part I PS5 1% complete" [ref=e595] [cursor=pointer]:
+          - generic [ref=e596]:
+            - generic [ref=e597]:
+              - heading "The Last of Us™ Part I" [level=3] [ref=e598]
+              - generic [ref=e599]: PS5
+            - generic [ref=e601]: 1% complete
+        - button "Cyberpunk 2077 PS5 1% complete" [ref=e602] [cursor=pointer]:
+          - generic [ref=e603]:
+            - generic [ref=e604]:
+              - heading "Cyberpunk 2077" [level=3] [ref=e605]
+              - generic [ref=e606]: PS5
+            - generic [ref=e608]: 1% complete
+        - button "Easter Journey PS5 100% complete" [ref=e609] [cursor=pointer]:
+          - generic [ref=e610]:
+            - generic [ref=e611]:
+              - heading "Easter Journey" [level=3] [ref=e612]
+              - generic [ref=e613]: PS5
+            - generic [ref=e615]: 100% complete
+        - button "Caravan Journey PS5 100% complete" [ref=e616] [cursor=pointer]:
+          - generic [ref=e617]:
+            - generic [ref=e618]:
+              - heading "Caravan Journey" [level=3] [ref=e619]
+              - generic [ref=e620]: PS5
+            - generic [ref=e622]: 100% complete
+        - button "Drag Journey PS5 100% complete" [ref=e623] [cursor=pointer]:
+          - generic [ref=e624]:
+            - generic [ref=e625]:
+              - heading "Drag Journey" [level=3] [ref=e626]
+              - generic [ref=e627]: PS5
+            - generic [ref=e629]: 100% complete
+        - button "Desert Journey PS5 100% complete" [ref=e630] [cursor=pointer]:
+          - generic [ref=e631]:
+            - generic [ref=e632]:
+              - heading "Desert Journey" [level=3] [ref=e633]
+              - generic [ref=e634]: PS5
+            - generic [ref=e636]: 100% complete
+        - 'button "Snow Journey: Nitro PS5 100% complete" [ref=e637] [cursor=pointer]':
+          - generic [ref=e638]:
+            - generic [ref=e639]:
+              - 'heading "Snow Journey: Nitro" [level=3] [ref=e640]'
+              - generic [ref=e641]: PS5
+            - generic [ref=e643]: 100% complete
+        - button "Dirt Journey PS5 100% complete" [ref=e644] [cursor=pointer]:
+          - generic [ref=e645]:
+            - generic [ref=e646]:
+              - heading "Dirt Journey" [level=3] [ref=e647]
+              - generic [ref=e648]: PS5
+            - generic [ref=e650]: 100% complete
+        - button "Monster Truck Journey PS5 100% complete" [ref=e651] [cursor=pointer]:
+          - generic [ref=e652]:
+            - generic [ref=e653]:
+              - heading "Monster Truck Journey" [level=3] [ref=e654]
+              - generic [ref=e655]: PS5
+            - generic [ref=e657]: 100% complete
+        - button "Tractor Journey PS5 100% complete" [ref=e658] [cursor=pointer]:
+          - generic [ref=e659]:
+            - generic [ref=e660]:
+              - heading "Tractor Journey" [level=3] [ref=e661]
+              - generic [ref=e662]: PS5
+            - generic [ref=e664]: 100% complete
+        - button "Speed Journey PS5 100% complete" [ref=e665] [cursor=pointer]:
+          - generic [ref=e666]:
+            - generic [ref=e667]:
+              - heading "Speed Journey" [level=3] [ref=e668]
+              - generic [ref=e669]: PS5
+            - generic [ref=e671]: 100% complete
+        - 'button "Italian Journey: Nitro PS5 100% complete" [ref=e672] [cursor=pointer]':
+          - generic [ref=e673]:
+            - generic [ref=e674]:
+              - 'heading "Italian Journey: Nitro" [level=3] [ref=e675]'
+              - generic [ref=e676]: PS5
+            - generic [ref=e678]: 100% complete
+        - 'button "Sprint Journey: Nitro PS5 100% complete" [ref=e679] [cursor=pointer]':
+          - generic [ref=e680]:
+            - generic [ref=e681]:
+              - 'heading "Sprint Journey: Nitro" [level=3] [ref=e682]'
+              - generic [ref=e683]: PS5
+            - generic [ref=e685]: 100% complete
+        - 'button "Monument Journey: Nitro PS5 100% complete" [ref=e686] [cursor=pointer]':
+          - generic [ref=e687]:
+            - generic [ref=e688]:
+              - 'heading "Monument Journey: Nitro" [level=3] [ref=e689]'
+              - generic [ref=e690]: PS5
+            - generic [ref=e692]: 100% complete
+        - 'button "Speed Journey: Nitro PS5 100% complete" [ref=e693] [cursor=pointer]':
+          - generic [ref=e694]:
+            - generic [ref=e695]:
+              - 'heading "Speed Journey: Nitro" [level=3] [ref=e696]'
+              - generic [ref=e697]: PS5
+            - generic [ref=e699]: 100% complete
+        - button "Classic Journey PS5 100% complete" [ref=e700] [cursor=pointer]:
+          - generic [ref=e701]:
+            - generic [ref=e702]:
+              - heading "Classic Journey" [level=3] [ref=e703]
+              - generic [ref=e704]: PS5
+            - generic [ref=e706]: 100% complete
+        - button "Lies of P PS5 2% complete" [ref=e707] [cursor=pointer]:
+          - generic [ref=e708]:
+            - generic [ref=e709]:
+              - heading "Lies of P" [level=3] [ref=e710]
+              - generic [ref=e711]: PS5
+            - generic [ref=e713]: 2% complete
+        - button "The Talos Principle 2 PS5 62% complete" [ref=e714] [cursor=pointer]:
+          - generic [ref=e715]:
+            - generic [ref=e716]:
+              - heading "The Talos Principle 2" [level=3] [ref=e717]
+              - generic [ref=e718]: PS5
+            - generic [ref=e720]: 62% complete
+        - button "PAW Patrol World PS5 40% complete" [ref=e721] [cursor=pointer]:
+          - generic [ref=e722]:
+            - generic [ref=e723]:
+              - heading "PAW Patrol World" [level=3] [ref=e724]
+              - generic [ref=e725]: PS5
+            - generic [ref=e727]: 40% complete
+        - button "Microsoft Flight Simulator 2024 PS5 6% complete Active" [ref=e728] [cursor=pointer]:
+          - generic [ref=e729]:
+            - generic [ref=e730]:
+              - heading "Microsoft Flight Simulator 2024" [level=3] [ref=e731]
+              - generic [ref=e732]: PS5
+            - generic [ref=e734]: 6% complete
+          - generic [ref=e735]: Active
