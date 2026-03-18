@@ -6,10 +6,10 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, resolve } from "node:path";
+import { dirname } from "node:path";
 
 import { AppError } from "./errors.js";
+import { resolvePsnCredentialsPath } from "./runtime-config.js";
 
 import type { PsnTokenStatusResponse } from "../shared/contracts.js";
 
@@ -18,17 +18,13 @@ type PersistedPsnCredentials = {
   updatedAt: string;
 };
 
-export const DEFAULT_PSN_CREDENTIALS_PATH = resolve(
-  homedir(),
-  ".streamer-tools",
-  "psn-credentials.json",
-);
+export const getDefaultPsnCredentialsPath = () => resolvePsnCredentialsPath();
 
 const DIRECTORY_MODE = 0o700;
 const FILE_MODE = 0o600;
 
 export class PsnCredentialStore {
-  constructor(private readonly credentialsPath = DEFAULT_PSN_CREDENTIALS_PATH) {}
+  constructor(private readonly credentialsPath = getDefaultPsnCredentialsPath()) {}
 
   getStatus(): PsnTokenStatusResponse {
     const credentials = this.readCredentials();

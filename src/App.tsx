@@ -28,6 +28,7 @@ import {
 } from "./components.js";
 
 type ConnectionState = "loading" | "ready" | "error";
+type PsnAccessIssue = "missing" | "invalid" | null;
 
 const trophyBrowserGradeIcon: Record<TrophyBrowserItem["grade"], string> = {
   platinum: "/img/40-platinum.png",
@@ -91,7 +92,8 @@ const defaultPsnTokenStatus: PsnTokenStatusResponse = {
 
 const SEARCH_LIMIT = 12;
 const TOKEN_REQUIRED_MESSAGE =
-  "Paste a PSN token above to load titles and trophies.";
+  "Open PSN access to save a token before loading titles and trophies.";
+const PSN_TOKEN_URL = "https://ca.account.sony.com/api/v1/ssocookie";
 
 const resolveSelectedPsnTitleId = (
   nextActiveGame: ActiveGameSelection,
@@ -119,6 +121,55 @@ const extractErrorMessage = (error: unknown, fallback: string) => {
   }
 
   return fallback;
+};
+
+const extractErrorType = (error: unknown) => {
+  if (typeof error === "object" && error !== null) {
+    if ("type" in error && typeof error.type === "string") {
+      return error.type;
+    }
+
+    if (
+      "error" in error &&
+      typeof error.error === "object" &&
+      error.error !== null &&
+      "type" in error.error &&
+      typeof error.error.type === "string"
+    ) {
+      return error.error.type;
+    }
+  }
+
+  return null;
+};
+
+const resolvePsnAccessIssue = (error: unknown): PsnAccessIssue => {
+  const type = extractErrorType(error);
+  const message = extractErrorMessage(error, "").toLowerCase();
+
+  if (type === "missing_token" || message.includes("missing psn token")) {
+    return "missing";
+  }
+
+  if (type === "psn_auth") {
+    return "invalid";
+  }
+
+  if (
+    type === "invalid_request" &&
+    (message.includes("token") || message.includes("npsso") || message.includes("access code"))
+  ) {
+    return "invalid";
+  }
+
+  if (
+    message.includes("invalid") &&
+    (message.includes("token") || message.includes("npsso") || message.includes("access code"))
+  ) {
+    return "invalid";
+  }
+
+  return null;
 };
 
 const toTargetRequest = (
@@ -194,16 +245,30 @@ function DashboardApp() {
   const [titleSearchError, setTitleSearchError] = useState<string | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
+  const [psnAccessOpen, setPsnAccessOpen] = useState(false);
+  const [psnAccessIssue, setPsnAccessIssue] = useState<PsnAccessIssue>(null);
   const [activeGamePendingId, setActiveGamePendingId] = useState<string | null>(null);
   const [targetPendingKey, setTargetPendingKey] = useState<string | null>(null);
   const [savingAdvancedGame, setSavingAdvancedGame] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
 
   const overlayUrlBase = useMemo(() => window.location.origin, []);
+  const psnAccessSummaryText =
+    psnAccessIssue === "missing"
+      ? "A saved NPSSO token is required before this control room can load PSN data."
+      : psnAccessIssue === "invalid"
+        ? "The saved token was rejected by PSN. Paste a fresh NPSSO token to continue."
+        : "Update or clear the locally stored NPSSO token for this machine.";
+
+  useEffect(() => {
+    document.body.classList.toggle("modal-open", psnAccessOpen);
+    return () => document.body.classList.remove("modal-open");
+  }, [psnAccessOpen]);
 
   const fetchTitleTrophiesForGame = async (
     nextActiveGame: ActiveGameSelection,
     nextSummary: TrophySummaryResponse,
+    tokenConfigured = psnTokenStatus.configured,
   ) => {
     const selectedTitleId = resolveSelectedPsnTitleId(nextActiveGame, nextSummary);
 
@@ -213,9 +278,11 @@ function DashboardApp() {
         error:
           nextActiveGame.mode === "custom"
             ? "Trophy targeting is unavailable while custom mode is active."
-            : !psnTokenStatus.configured
+            : !tokenConfigured
               ? TOKEN_REQUIRED_MESSAGE
               : null,
+        psnAccessIssue:
+          nextActiveGame.mode === "custom" || tokenConfigured ? null : ("missing" as const),
       };
     }
 
@@ -223,11 +290,13 @@ function DashboardApp() {
       return {
         response: await api.getTitleTrophies(selectedTitleId),
         error: null,
+        psnAccessIssue: null,
       };
     } catch (error) {
       return {
         response: defaultTitleTrophies,
         error: extractErrorMessage(error, "Unable to load trophies for the selected title."),
+        psnAccessIssue: resolvePsnAccessIssue(error),
       };
     }
   };
@@ -239,15 +308,23 @@ function DashboardApp() {
     setTitleTrophiesLoading(true);
 
     try {
-      const nextState = await fetchTitleTrophiesForGame(nextActiveGame, nextSummary);
+      const nextState = await fetchTitleTrophiesForGame(
+        nextActiveGame,
+        nextSummary,
+        psnTokenStatus.configured,
+      );
       setTitleTrophies(nextState.response);
       setTitleTrophiesError(nextState.error);
+      setPsnAccessIssue(nextState.psnAccessIssue);
+      if (nextState.psnAccessIssue) {
+        setPsnAccessOpen(true);
+      }
     } finally {
       setTitleTrophiesLoading(false);
     }
   };
 
-  const load = async (nextStatusMessage = "Refreshing") => {
+  const load = async (nextStatusMessage = "Refreshing"): Promise<PsnAccessIssue> => {
     setConnectionState("loading");
     setStatusMessage(nextStatusMessage);
 
@@ -298,19 +375,47 @@ function DashboardApp() {
       setActiveGame(nextActiveGame);
       setOverlayData(nextOverlayData);
 
-      let titleTrophyState = {
+      let titleTrophyState: {
+        response: TitleTrophiesResponse;
+        error: string | null;
+        psnAccessIssue: PsnAccessIssue;
+      } = {
         response: defaultTitleTrophies,
         error: nextTokenStatus.configured ? null : TOKEN_REQUIRED_MESSAGE,
+        psnAccessIssue: nextTokenStatus.configured ? null : ("missing" as const),
       };
 
       if (nextSummaryResult.status === "fulfilled") {
         setTitleTrophiesLoading(true);
-        titleTrophyState = await fetchTitleTrophiesForGame(nextActiveGame, nextSummary);
+        titleTrophyState = await fetchTitleTrophiesForGame(
+          nextActiveGame,
+          nextSummary,
+          nextTokenStatus.configured,
+        );
         setTitleTrophiesLoading(false);
       }
 
       setTitleTrophies(titleTrophyState.response);
       setTitleTrophiesError(titleTrophyState.error);
+      const nextPsnAccessIssue =
+        (!nextTokenStatus.configured
+          ? "missing"
+          : null) ??
+        titleTrophyState.psnAccessIssue ??
+        [
+          nextHealthResult.status === "rejected" ? nextHealthResult.reason : null,
+          nextSummaryResult.status === "rejected" ? nextSummaryResult.reason : null,
+          nextSettingsResult.status === "rejected" ? nextSettingsResult.reason : null,
+          nextActiveGameResult.status === "rejected" ? nextActiveGameResult.reason : null,
+          nextOverlayDataResult.status === "rejected" ? nextOverlayDataResult.reason : null,
+        ]
+          .map(resolvePsnAccessIssue)
+          .find((issue): issue is Exclude<PsnAccessIssue, null> => issue !== null) ??
+        null;
+      setPsnAccessIssue(nextPsnAccessIssue);
+      if (nextPsnAccessIssue) {
+        setPsnAccessOpen(true);
+      }
       setDebugPayload({
         tokenStatus:
           nextTokenStatusResult.status === "fulfilled"
@@ -341,8 +446,8 @@ function DashboardApp() {
 
       if (!nextTokenStatus.configured) {
         setConnectionState("error");
-        setStatusMessage("Token required");
-        return;
+        setStatusMessage("PSN access required");
+        return nextPsnAccessIssue;
       }
 
       if (
@@ -363,16 +468,23 @@ function DashboardApp() {
         setStatusMessage(
           extractErrorMessage(firstError, titleTrophyState.error ?? "Unable to load PSN data."),
         );
-        return;
+        return nextPsnAccessIssue;
       }
 
       setConnectionState("ready");
       setStatusMessage("Connected");
+      return nextPsnAccessIssue;
     } catch (error) {
       setDebugPayload(error);
       setConnectionState("error");
       setStatusMessage("Error");
       setTitleTrophiesLoading(false);
+      const nextPsnAccessIssue = resolvePsnAccessIssue(error);
+      setPsnAccessIssue(nextPsnAccessIssue);
+      if (nextPsnAccessIssue) {
+        setPsnAccessOpen(true);
+      }
+      return nextPsnAccessIssue;
     }
   };
 
@@ -480,6 +592,9 @@ function DashboardApp() {
     () => formatTimestamp(psnTokenStatus.updatedAt),
     [psnTokenStatus.updatedAt],
   );
+  const openPsnTokenPage = () => {
+    window.open(PSN_TOKEN_URL, "_blank", "noopener,noreferrer");
+  };
 
   const saveSettings = async () => {
     setSavingSettings(true);
@@ -492,6 +607,11 @@ function DashboardApp() {
       setOverlayData(nextOverlayData);
       setStatusMessage("Display settings saved");
     } catch (error) {
+      const nextPsnAccessIssue = resolvePsnAccessIssue(error);
+      setPsnAccessIssue(nextPsnAccessIssue);
+      if (nextPsnAccessIssue) {
+        setPsnAccessOpen(true);
+      }
       setStatusMessage("Display settings failed");
       setDebugPayload(error);
     } finally {
@@ -543,6 +663,11 @@ function DashboardApp() {
       setTitleTrophiesError(
         extractErrorMessage(error, "Unable to switch the active game."),
       );
+      const nextPsnAccessIssue = resolvePsnAccessIssue(error);
+      setPsnAccessIssue(nextPsnAccessIssue);
+      if (nextPsnAccessIssue) {
+        setPsnAccessOpen(true);
+      }
       setStatusMessage("Active game update failed");
       setDebugPayload(error);
     } finally {
@@ -570,6 +695,11 @@ function DashboardApp() {
       setStatusMessage("Advanced overrides saved");
       setAdvancedOpen(false);
     } catch (error) {
+      const nextPsnAccessIssue = resolvePsnAccessIssue(error);
+      setPsnAccessIssue(nextPsnAccessIssue);
+      if (nextPsnAccessIssue) {
+        setPsnAccessOpen(true);
+      }
       setStatusMessage("Advanced overrides failed");
       setDebugPayload(error);
     } finally {
@@ -616,6 +746,11 @@ function DashboardApp() {
         ...current,
         target: previousTarget,
       }));
+      const nextPsnAccessIssue = resolvePsnAccessIssue(error);
+      setPsnAccessIssue(nextPsnAccessIssue);
+      if (nextPsnAccessIssue) {
+        setPsnAccessOpen(true);
+      }
       setStatusMessage("Current trophy update failed");
       setDebugPayload(error);
     } finally {
@@ -632,7 +767,10 @@ function DashboardApp() {
       const nextTokenStatus = await api.savePsnToken(psnTokenInput);
       setPsnTokenStatus(nextTokenStatus);
       setPsnTokenInput("");
-      await load("Refreshing after token save");
+      const nextPsnAccessIssue = await load("Refreshing after token save");
+      if (!nextPsnAccessIssue) {
+        setPsnAccessOpen(false);
+      }
     } catch (error) {
       setPsnTokenError(
         extractErrorMessage(error, "Unable to save the PSN token locally."),
@@ -654,6 +792,7 @@ function DashboardApp() {
       setPsnTokenStatus(nextTokenStatus);
       setPsnTokenInput("");
       await load("Refreshing after token clear");
+      setPsnAccessOpen(true);
     } catch (error) {
       setPsnTokenError(
         extractErrorMessage(error, "Unable to clear the saved PSN token."),
@@ -693,236 +832,192 @@ function DashboardApp() {
   };
 
   return (
-    <div className="dashboard-shell">
-      <header className="hero-card">
-        <div>
-          <p className="eyebrow">Streamer Tools</p>
-          <h1>PSN Trophy Control Room</h1>
-          <p className="hero-copy">
-            Pick the active game visually, browse its trophies, and pin the one
-            you want on stream without dropping into the override form by
-            default.
-          </p>
-        </div>
-        <div className={`status-pill status-${connectionState}`}>{statusMessage}</div>
-      </header>
+    <>
+      {psnAccessOpen ? (
+        <PsnAccessModal
+          issue={psnAccessIssue}
+          summaryText={psnAccessSummaryText}
+          psnTokenStatusLabel={psnTokenStatusLabel}
+          psnTokenUpdatedLabel={psnTokenUpdatedLabel}
+          psnTokenStatus={psnTokenStatus}
+          psnTokenInput={psnTokenInput}
+          savingPsnToken={savingPsnToken}
+          clearingPsnToken={clearingPsnToken}
+          psnTokenError={psnTokenError}
+          onTokenInputChange={setPsnTokenInput}
+          onOpenTokenPage={openPsnTokenPage}
+          onSave={() => void savePsnToken()}
+          onClear={() => void clearPsnToken()}
+          onClose={() => setPsnAccessOpen(false)}
+        />
+      ) : null}
 
-      <section className="panel token-panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">PSN Access</p>
-            <h2>Local token storage</h2>
-          </div>
-          <span className="panel-tag">{psnTokenStatusLabel}</span>
-        </div>
-
-        <div className="token-panel-grid">
-          <label className="field token-field">
-            <span>PSN token</span>
-            <input
-              type="password"
-              autoComplete="off"
-              placeholder="Paste your NPSSO token"
-              value={psnTokenInput}
-              onChange={(event) => setPsnTokenInput(event.target.value)}
-            />
-          </label>
-
-          <div className="token-actions">
-            <button
-              className="action-button"
-              disabled={savingPsnToken || clearingPsnToken || psnTokenInput.trim().length === 0}
-              onClick={() => void savePsnToken()}
-            >
-              {savingPsnToken ? "Saving…" : "Save token"}
-            </button>
-            <button
-              className="ghost-button"
-              disabled={savingPsnToken || clearingPsnToken || !psnTokenStatus.configured}
-              onClick={() => void clearPsnToken()}
-            >
-              {clearingPsnToken ? "Clearing…" : "Clear token"}
-            </button>
-          </div>
-        </div>
-
-        <dl className="runtime-grid token-status-grid">
-          <div>
-            <dt>Status</dt>
-            <dd>{psnTokenStatusLabel}</dd>
-          </div>
-          <div>
-            <dt>Storage</dt>
-            <dd>{psnTokenStatus.storage}</dd>
-          </div>
-          <div>
-            <dt>Updated</dt>
-            <dd>{psnTokenUpdatedLabel}</dd>
-          </div>
-        </dl>
-
-        <p className="panel-footnote">
-          Stored only on this machine in <code>~/.streamer-tools/psn-credentials.json</code>.
-          The saved token is never returned to this page.
-        </p>
-        {psnTokenError ? <p className="panel-error">{psnTokenError}</p> : null}
-      </section>
-
-      <section className="panel-grid dashboard-top-grid">
-        <article className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Connection</p>
-              <h2>Runtime and routes</h2>
+      <div className="dashboard-shell">
+        <section className="panel-grid dashboard-top-grid">
+          <article className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Connection</p>
+                <h2>Runtime and routes</h2>
+              </div>
+              <div className="panel-header-actions">
+                <div className={`status-pill status-${connectionState}`}>{statusMessage}</div>
+                <button className="ghost-button" onClick={() => setPsnAccessOpen(true)}>
+                  PSN access
+                </button>
+                <button className="action-button" onClick={() => void load()}>
+                  Refresh all
+                </button>
+              </div>
             </div>
-            <button className="action-button" onClick={() => void load()}>
-              Refresh all
-            </button>
-          </div>
 
-          <dl className="runtime-grid">
-            <div>
-              <dt>Source</dt>
-              <dd>{health?.source ?? "psn-api"}</dd>
-            </div>
-            <div>
-              <dt>Configured</dt>
-              <dd>{health?.configured ? "Yes" : "No"}</dd>
-            </div>
-            <div>
-              <dt>Fetched</dt>
-              <dd>{summary.meta.fetchedAt || "Not yet loaded"}</dd>
-            </div>
-            <div>
-              <dt>Warnings</dt>
-              <dd>{summary.meta.warnings.length}</dd>
-            </div>
-          </dl>
+            <dl className="runtime-grid">
+              <div>
+                <dt>Source</dt>
+                <dd>{health?.source ?? "psn-api"}</dd>
+              </div>
+              <div>
+                <dt>PSN access</dt>
+                <dd>{psnTokenStatusLabel}</dd>
+              </div>
+              <div>
+                <dt>Token updated</dt>
+                <dd>{psnTokenUpdatedLabel}</dd>
+              </div>
+              <div>
+                <dt>Fetched</dt>
+                <dd>{summary.meta.fetchedAt || "Not yet loaded"}</dd>
+              </div>
+              <div>
+                <dt>Warnings</dt>
+                <dd>{summary.meta.warnings.length}</dd>
+              </div>
+            </dl>
 
-          <div className="route-list">
-            <span>{overlayUrlBase}/overlay/loop</span>
-            <span>{overlayUrlBase}/overlay/overall</span>
-            <span>{overlayUrlBase}/overlay/current-game</span>
-            <span>{overlayUrlBase}/overlay/target-trophy</span>
-          </div>
-        </article>
-
-        <article className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Display Settings</p>
-              <h2>Loop timing and visibility</h2>
+            <div className="route-list">
+              <span>{overlayUrlBase}/overlay/loop</span>
+              <span>{overlayUrlBase}/overlay/overall</span>
+              <span>{overlayUrlBase}/overlay/current-game</span>
+              <span>{overlayUrlBase}/overlay/target-trophy</span>
             </div>
-            <button
-              className="action-button"
-              disabled={savingSettings}
-              onClick={() => void saveSettings()}
-            >
-              {savingSettings ? "Saving…" : "Save settings"}
-            </button>
-          </div>
+          </article>
 
-          <div className="editor-grid">
-            <NumberField
-              label="Overall duration (ms)"
-              value={settings.overallDurationMs}
-              onChange={(value) =>
-                setSettings((current) => ({
-                  ...current,
-                  overallDurationMs: value ?? current.overallDurationMs,
-                }))
-              }
-            />
-            <NumberField
-              label="Current game duration (ms)"
-              value={settings.currentGameDurationMs}
-              onChange={(value) =>
-                setSettings((current) => ({
-                  ...current,
-                  currentGameDurationMs: value ?? current.currentGameDurationMs,
-                }))
-              }
-            />
-            <NumberField
-              label="Target trophy duration (ms)"
-              value={settings.targetTrophyDurationMs}
-              onChange={(value) =>
-                setSettings((current) => ({
-                  ...current,
-                  targetTrophyDurationMs: value ?? current.targetTrophyDurationMs,
-                }))
-              }
-            />
-            <TextField
-              label="Target trophy tag text"
-              value={settings.targetTrophyTagText}
-              onChange={(value) =>
-                setSettings((current) => ({
-                  ...current,
-                  targetTrophyTagText: value,
-                }))
-              }
-            />
-          </div>
+          <article className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Display Settings</p>
+                <h2>Loop timing and visibility</h2>
+              </div>
+              <button
+                className="action-button"
+                disabled={savingSettings}
+                onClick={() => void saveSettings()}
+              >
+                {savingSettings ? "Saving…" : "Save settings"}
+              </button>
+            </div>
 
-          <div className="toggle-grid settings-toggle-grid">
-            <ToggleField
-              label="Show grade rows"
-              checked={settings.showGradeRows}
-              onChange={(checked) =>
-                setSettings((current) => ({ ...current, showGradeRows: checked }))
-              }
-            />
-            <ToggleField
-              label="Show overall completion"
-              checked={settings.showOverallCompletion}
-              onChange={(checked) =>
-                setSettings((current) => ({
-                  ...current,
-                  showOverallCompletion: checked,
-                }))
-              }
-            />
-            <ToggleField
-              label="Show current completion"
-              checked={settings.showCurrentCompletion}
-              onChange={(checked) =>
-                setSettings((current) => ({
-                  ...current,
-                  showCurrentCompletion: checked,
-                }))
-              }
-            />
-            <ToggleField
-              label="Show current totals"
-              checked={settings.showCurrentTotals}
-              onChange={(checked) =>
-                setSettings((current) => ({ ...current, showCurrentTotals: checked }))
-              }
-            />
-            <ToggleField
-              label="Show target trophy in loop"
-              checked={settings.showTargetTrophyInLoop}
-              onChange={(checked) =>
-                setSettings((current) => ({
-                  ...current,
-                  showTargetTrophyInLoop: checked,
-                }))
-              }
-            />
-            <ToggleField
-              label="Show target trophy tag"
-              checked={settings.showTargetTrophyTag}
-              onChange={(checked) =>
-                setSettings((current) => ({
-                  ...current,
-                  showTargetTrophyTag: checked,
-                }))
-              }
-            />
-          </div>
-        </article>
-      </section>
+            <div className="editor-grid">
+              <NumberField
+                label="Overall duration (ms)"
+                value={settings.overallDurationMs}
+                onChange={(value) =>
+                  setSettings((current) => ({
+                    ...current,
+                    overallDurationMs: value ?? current.overallDurationMs,
+                  }))
+                }
+              />
+              <NumberField
+                label="Current game duration (ms)"
+                value={settings.currentGameDurationMs}
+                onChange={(value) =>
+                  setSettings((current) => ({
+                    ...current,
+                    currentGameDurationMs: value ?? current.currentGameDurationMs,
+                  }))
+                }
+              />
+              <NumberField
+                label="Target trophy duration (ms)"
+                value={settings.targetTrophyDurationMs}
+                onChange={(value) =>
+                  setSettings((current) => ({
+                    ...current,
+                    targetTrophyDurationMs: value ?? current.targetTrophyDurationMs,
+                  }))
+                }
+              />
+              <TextField
+                label="Target trophy tag text"
+                value={settings.targetTrophyTagText}
+                onChange={(value) =>
+                  setSettings((current) => ({
+                    ...current,
+                    targetTrophyTagText: value,
+                  }))
+                }
+              />
+            </div>
+
+            <div className="toggle-grid settings-toggle-grid">
+              <ToggleField
+                label="Show grade rows"
+                checked={settings.showGradeRows}
+                onChange={(checked) =>
+                  setSettings((current) => ({ ...current, showGradeRows: checked }))
+                }
+              />
+              <ToggleField
+                label="Show overall completion"
+                checked={settings.showOverallCompletion}
+                onChange={(checked) =>
+                  setSettings((current) => ({
+                    ...current,
+                    showOverallCompletion: checked,
+                  }))
+                }
+              />
+              <ToggleField
+                label="Show current completion"
+                checked={settings.showCurrentCompletion}
+                onChange={(checked) =>
+                  setSettings((current) => ({
+                    ...current,
+                    showCurrentCompletion: checked,
+                  }))
+                }
+              />
+              <ToggleField
+                label="Show current totals"
+                checked={settings.showCurrentTotals}
+                onChange={(checked) =>
+                  setSettings((current) => ({ ...current, showCurrentTotals: checked }))
+                }
+              />
+              <ToggleField
+                label="Show target trophy in loop"
+                checked={settings.showTargetTrophyInLoop}
+                onChange={(checked) =>
+                  setSettings((current) => ({
+                    ...current,
+                    showTargetTrophyInLoop: checked,
+                  }))
+                }
+              />
+              <ToggleField
+                label="Show target trophy tag"
+                checked={settings.showTargetTrophyTag}
+                onChange={(checked) =>
+                  setSettings((current) => ({
+                    ...current,
+                    showTargetTrophyTag: checked,
+                  }))
+                }
+              />
+            </div>
+          </article>
+        </section>
 
       <section className="panel live-preview-panel">
         <div className="panel-header">
@@ -1290,6 +1385,151 @@ function DashboardApp() {
       >
         <pre className="debug-panel">{JSON.stringify(debugPayload, null, 2)}</pre>
       </CollapsibleSection>
+      </div>
+    </>
+  );
+}
+
+function PsnAccessModal({
+  issue,
+  summaryText,
+  psnTokenStatusLabel,
+  psnTokenUpdatedLabel,
+  psnTokenStatus,
+  psnTokenInput,
+  savingPsnToken,
+  clearingPsnToken,
+  psnTokenError,
+  onTokenInputChange,
+  onOpenTokenPage,
+  onSave,
+  onClear,
+  onClose,
+}: {
+  issue: PsnAccessIssue;
+  summaryText: string;
+  psnTokenStatusLabel: string;
+  psnTokenUpdatedLabel: string;
+  psnTokenStatus: PsnTokenStatusResponse;
+  psnTokenInput: string;
+  savingPsnToken: boolean;
+  clearingPsnToken: boolean;
+  psnTokenError: string | null;
+  onTokenInputChange: (value: string) => void;
+  onOpenTokenPage: () => void;
+  onSave: () => void;
+  onClear: () => void;
+  onClose: () => void;
+}) {
+  const introText =
+    "Save an NPSSO token locally on this machine so the control room can load PSN data.";
+  const storageLabel =
+    psnTokenStatus.storage === "local-file" ? "Local file" : psnTokenStatus.storage;
+
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section
+        className="panel token-panel token-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="psn-access-title"
+        aria-describedby="psn-access-summary"
+      >
+        <button
+          className="token-modal-close"
+          type="button"
+          aria-label="Close PSN access"
+          onClick={onClose}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 6 18 18" />
+            <path d="M18 6 6 18" />
+          </svg>
+        </button>
+
+        <div className="token-modal-header">
+          <div className="token-modal-heading">
+            <p className="eyebrow">PSN Access</p>
+            <div className="token-modal-title-row">
+              <h2 id="psn-access-title">Local token storage</h2>
+              <span className="token-modal-status">{psnTokenStatusLabel}</span>
+            </div>
+            <p id="psn-access-summary" className="token-modal-copy">
+              {introText}
+            </p>
+          </div>
+        </div>
+
+        {issue ? (
+          <section
+            className={`token-modal-callout ${issue === "invalid" ? "is-error" : ""}`}
+            aria-label="PSN access status"
+          >
+            <p className="token-modal-callout-label">Connection status</p>
+            <p className={issue === "invalid" ? "panel-error" : undefined}>{summaryText}</p>
+          </section>
+        ) : null}
+
+        <div className="token-panel-grid">
+          <label className="field token-field">
+            <span>PSN token</span>
+            <input
+              type="password"
+              autoComplete="off"
+              placeholder="Paste your NPSSO token"
+              value={psnTokenInput}
+              onChange={(event) => onTokenInputChange(event.target.value)}
+            />
+          </label>
+
+          <div className="token-actions">
+            <button
+              className="token-modal-button token-modal-button-secondary"
+              type="button"
+              onClick={onOpenTokenPage}
+            >
+              Open token page
+            </button>
+            <button
+              className="token-modal-button token-modal-button-primary"
+              type="button"
+              disabled={savingPsnToken || clearingPsnToken || psnTokenInput.trim().length === 0}
+              onClick={onSave}
+            >
+              {savingPsnToken ? "Saving…" : "Save token"}
+            </button>
+            <button
+              className="token-modal-button token-modal-button-destructive"
+              type="button"
+              disabled={savingPsnToken || clearingPsnToken || !psnTokenStatus.configured}
+              onClick={onClear}
+            >
+              {clearingPsnToken ? "Clearing…" : "Clear token"}
+            </button>
+          </div>
+        </div>
+
+        <dl className="token-status-strip">
+          <div className="token-status-card">
+            <dt>Status</dt>
+            <dd>{psnTokenStatusLabel}</dd>
+          </div>
+          <div className="token-status-card">
+            <dt>Storage</dt>
+            <dd>{storageLabel}</dd>
+          </div>
+          <div className="token-status-card">
+            <dt>Updated</dt>
+            <dd>{psnTokenUpdatedLabel}</dd>
+          </div>
+        </dl>
+
+        <p className="panel-footnote token-storage-note">
+          Stored only on this machine in <code>~/.streamer-tools/psn-credentials.json</code>.
+          The saved token is never returned to this page.
+        </p>
+        {psnTokenError ? <p className="panel-error token-modal-error">{psnTokenError}</p> : null}
+      </section>
     </div>
   );
 }

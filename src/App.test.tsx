@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -188,7 +188,9 @@ describe("DashboardApp", () => {
   let settings = createDefaultOverlaySettings();
   let targetsByTitle: Record<string, TargetTrophySelection> = {};
   let tokenStatus: PsnTokenStatusResponse;
+  let summaryError: { type: string; message: string } | null;
   let fetchMock: ReturnType<typeof vi.fn>;
+  let openMock: ReturnType<typeof vi.spyOn>;
 
   const currentTitleId = () =>
     activeGame.mode === "psn"
@@ -288,7 +290,7 @@ describe("DashboardApp", () => {
       storage: "local-file",
       updatedAt: "2026-03-17T00:00:00Z",
     };
-
+    summaryError = null;
     fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
       const method = init?.method ?? "GET";
 
@@ -327,6 +329,13 @@ describe("DashboardApp", () => {
       }
 
       if (input === "/api/trophies/summary") {
+        if (summaryError) {
+          return {
+            ok: false,
+            json: async () => summaryError,
+          };
+        }
+
         return {
           ok: true,
           json: async () => summary,
@@ -420,22 +429,36 @@ describe("DashboardApp", () => {
     });
 
     vi.stubGlobal("fetch", fetchMock);
+    openMock = vi.spyOn(window, "open").mockImplementation(() => null);
   });
 
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
   });
 
-  it("saves and clears the local token without rendering the stored value back", async () => {
+  it("opens PSN access automatically when no token is stored, then saves and clears it", async () => {
+    tokenStatus = {
+      configured: false,
+      storage: "local-file",
+      updatedAt: null,
+    };
+
     render(<App />);
 
-    const tokenField = (await screen.findByLabelText("PSN token")) as HTMLInputElement;
+    const dialog = await screen.findByRole("dialog", { name: "Local token storage" });
+    expect(
+      within(dialog).getAllByText(
+        "A saved NPSSO token is required before this control room can load PSN data.",
+      ),
+    ).toHaveLength(1);
+    const tokenField = within(dialog).getByLabelText("PSN token") as HTMLInputElement;
     const summaryCallsBefore = fetchMock.mock.calls.filter(
       ([input]) => input === "/api/trophies/summary",
     ).length;
 
     fireEvent.change(tokenField, { target: { value: "super-secret-token" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save token" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save token" }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -444,7 +467,7 @@ describe("DashboardApp", () => {
       );
     });
     await waitFor(() => {
-      expect(tokenField).toHaveValue("");
+      expect(screen.queryByRole("dialog", { name: "Local token storage" })).not.toBeInTheDocument();
     });
     await waitFor(() => {
       const summaryCallsAfter = fetchMock.mock.calls.filter(
@@ -453,7 +476,12 @@ describe("DashboardApp", () => {
       expect(summaryCallsAfter).toBeGreaterThan(summaryCallsBefore);
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Clear token" }));
+    fireEvent.click(screen.getByRole("button", { name: "PSN access" }));
+
+    const reopenedDialog = await screen.findByRole("dialog", { name: "Local token storage" });
+    expect(within(reopenedDialog).getByLabelText("PSN token")).toHaveValue("");
+
+    fireEvent.click(within(reopenedDialog).getByRole("button", { name: "Clear token" }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -464,6 +492,64 @@ describe("DashboardApp", () => {
     await waitFor(() => {
       expect(screen.getAllByText("No token saved").length).toBeGreaterThan(0);
     });
+  });
+
+  it("reopens PSN access when the saved token is rejected", async () => {
+    summaryError = {
+      type: "psn_auth",
+      message: "Invalid NPSSO token.",
+    };
+
+    render(<App />);
+
+    const dialog = await screen.findByRole("dialog", { name: "Local token storage" });
+    await waitFor(() => {
+      expect(within(dialog).getAllByText(/rejected by PSN/i)).toHaveLength(1);
+    });
+    expect(screen.queryByText("PSN Trophy Control Room")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "PSN access" })).toBeInTheDocument();
+  });
+
+  it("renders the redesigned PSN access controls and closes from the icon button", async () => {
+    tokenStatus = {
+      configured: false,
+      storage: "local-file",
+      updatedAt: null,
+    };
+
+    render(<App />);
+
+    const dialog = await screen.findByRole("dialog", { name: "Local token storage" });
+    expect(within(dialog).getByRole("button", { name: "Close PSN access" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Open token page" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Save token" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Clear token" })).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close PSN access" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Local token storage" })).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: "PSN access" })).toBeInTheDocument();
+  });
+
+  it("opens the Sony token page from the PSN access dialog", async () => {
+    tokenStatus = {
+      configured: false,
+      storage: "local-file",
+      updatedAt: null,
+    };
+
+    render(<App />);
+
+    const dialog = await screen.findByRole("dialog", { name: "Local token storage" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Open token page" }));
+
+    expect(openMock).toHaveBeenCalledWith(
+      "https://ca.account.sony.com/api/v1/ssocookie",
+      "_blank",
+      "noopener,noreferrer",
+    );
   });
 
   it("switches the active title from the visual picker and loads its trophies", async () => {

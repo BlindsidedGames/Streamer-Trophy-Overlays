@@ -29,6 +29,10 @@ body {
   min-height: 100vh;
 }
 
+body.modal-open {
+  overflow: hidden;
+}
+
 body.overlay-body {
   background: transparent;
 }
@@ -286,10 +290,10 @@ dd {
   --strip-width: 1260px;
   --strip-padding-block: 16px;
   --strip-padding-inline: 16px;
-  --strip-radius: 24px;
+  --strip-radius: 17px;
   --strip-gap: 14px;
   --strip-art-size: 82px;
-  --strip-art-radius: 18px;
+  --strip-art-radius: var(--strip-radius);
   --strip-chip-radius: 10px;
   --strip-metric-width: 132px;
   --strip-trophy-width: 500px;
@@ -390,10 +394,10 @@ dd {
   --strip-width: 100%;
   --strip-padding-block: 14px;
   --strip-padding-inline: 16px;
-  --strip-radius: 22px;
+  --strip-radius: 15px;
   --strip-gap: 12px;
   --strip-art-size: 68px;
-  --strip-art-radius: 16px;
+  --strip-art-radius: var(--strip-radius);
   --strip-metric-width: 122px;
   --strip-trophy-width: 372px;
   --strip-title-size: 28px;
@@ -650,26 +654,246 @@ dd {
   margin-bottom: 24px;
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 40px;
+  background: rgba(5, 10, 18, 0.76);
+  backdrop-filter: blur(14px);
+}
+
+.token-modal {
+  position: relative;
+  width: min(780px, calc(100vw - 80px));
+  max-height: calc(100vh - 80px);
+  margin-bottom: 0;
+  overflow: auto;
+  gap: 20px;
+}
+
+.token-modal-header {
+  display: grid;
+  gap: 14px;
+  padding-right: 64px;
+}
+
+.token-modal-heading {
+  display: grid;
+  gap: 12px;
+}
+
+.token-modal-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.token-modal-copy {
+  max-width: 40rem;
+  color: #bcc9e0;
+  line-height: 1.6;
+}
+
+.token-modal-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(186, 205, 237, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+  color: #dce7fb;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.token-modal-close {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid rgba(186, 205, 237, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #dce7fb;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    transform 140ms ease;
+}
+
+.token-modal-close svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.token-modal-close:hover {
+  border-color: rgba(152, 190, 255, 0.4);
+  background: rgba(120, 154, 214, 0.12);
+  transform: translateY(-1px);
+}
+
+.token-modal-close:focus-visible,
+.token-modal-button:focus-visible,
+.token-field input:focus-visible {
+  outline: 2px solid rgba(152, 190, 255, 0.72);
+  outline-offset: 2px;
+}
+
+.token-modal-callout {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 16px 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(186, 205, 237, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: #dce7fb;
+}
+
+.token-modal-callout.is-error {
+  border-color: rgba(255, 154, 154, 0.24);
+  background: rgba(79, 18, 18, 0.22);
+}
+
+.token-modal-callout-label {
+  color: #8fa6d7;
+  font-size: 0.76rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
 .token-panel-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 16px;
+  gap: 14px;
   align-items: end;
+}
+
+.token-field {
+  gap: 10px;
 }
 
 .token-field input {
   min-height: 52px;
+  border-radius: 14px;
 }
 
 .token-actions {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
+  align-items: stretch;
 }
 
-.token-status-grid {
+.token-modal-button {
+  min-height: 52px;
+  padding: 0 18px;
+  border-radius: 16px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.04);
+  color: #dce7fb;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    transform 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.token-modal-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.token-modal-button:disabled {
+  cursor: progress;
+  opacity: 0.78;
+  transform: none;
+}
+
+.token-modal-button-primary {
+  background: linear-gradient(180deg, #8bb0f5 0%, #4f72c3 100%);
+  color: #09121f;
+  box-shadow: 0 12px 24px rgba(61, 102, 181, 0.28);
+}
+
+.token-modal-button-primary:hover:not(:disabled) {
+  box-shadow: 0 16px 28px rgba(61, 102, 181, 0.34);
+}
+
+.token-modal-button-secondary {
+  border-color: rgba(186, 205, 237, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.token-modal-button-secondary:hover:not(:disabled) {
+  border-color: rgba(152, 190, 255, 0.4);
+  background: rgba(120, 154, 214, 0.12);
+}
+
+.token-modal-button-destructive {
+  border-color: rgba(255, 166, 166, 0.18);
+  background: rgba(76, 22, 31, 0.26);
+  color: #f3c7c7;
+}
+
+.token-modal-button-destructive:hover:not(:disabled) {
+  border-color: rgba(255, 166, 166, 0.34);
+  background: rgba(103, 30, 41, 0.34);
+}
+
+.token-status-strip {
+  display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.token-status-card {
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(186, 205, 237, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.token-status-card dt {
+  margin-bottom: 8px;
+  color: #8fa6d7;
+  font-size: 0.76rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.token-status-card dd {
+  margin: 0;
+  color: #eef3ff;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.token-storage-note {
+  color: #aebad1;
+  line-height: 1.6;
+}
+
+.token-modal-error {
+  margin-top: -4px;
 }
 
 .token-panel code {
@@ -876,7 +1100,7 @@ dd {
 
 .target-trophy-card {
   --target-trophy-art-size: 96px;
-  --target-trophy-art-radius: 16px;
+  --target-trophy-art-radius: 11px;
   --strip-chip-radius: 10px;
   --strip-chip-text-size: 11px;
   display: grid;
@@ -884,7 +1108,7 @@ dd {
   gap: 18px;
   width: 100%;
   padding: 22px;
-  border-radius: 16px;
+  border-radius: 11px;
   border: 1px solid rgba(168, 197, 247, 0.22);
   background:
     linear-gradient(135deg, rgba(33, 52, 83, 0.96) 0%, rgba(14, 22, 35, 0.96) 100%);
@@ -898,10 +1122,10 @@ dd {
   --strip-width: 1260px;
   --strip-padding-block: 16px;
   --strip-padding-inline: 16px;
-  --strip-radius: 24px;
+  --strip-radius: 17px;
   --strip-art-size: 82px;
   --target-trophy-art-size: var(--strip-art-size);
-  --target-trophy-art-radius: 18px;
+  --target-trophy-art-radius: var(--strip-radius);
   width: var(--strip-width);
   min-height: calc(var(--strip-art-size) + (var(--strip-padding-block) * 2));
   padding: var(--strip-padding-block) var(--strip-padding-inline);
@@ -919,10 +1143,10 @@ dd {
   --strip-width: 100%;
   --strip-padding-block: 14px;
   --strip-padding-inline: 16px;
-  --strip-radius: 22px;
+  --strip-radius: 15px;
   --strip-art-size: 68px;
   --target-trophy-art-size: var(--strip-art-size);
-  --target-trophy-art-radius: 16px;
+  --target-trophy-art-radius: var(--strip-radius);
   width: 100%;
   min-width: 0;
   grid-template-columns: var(--target-trophy-art-size) minmax(0, 1fr);
@@ -932,10 +1156,10 @@ dd {
 .target-trophy-card-standalone {
   --strip-padding-block: 16px;
   --strip-padding-inline: 16px;
-  --strip-radius: 24px;
+  --strip-radius: 17px;
   --strip-art-size: 82px;
   --target-trophy-art-size: var(--strip-art-size);
-  --target-trophy-art-radius: 18px;
+  --target-trophy-art-radius: var(--strip-radius);
   width: fit-content;
   max-width: calc(100vw - 56px);
   grid-template-columns: var(--target-trophy-art-size) auto;
@@ -1223,7 +1447,7 @@ dd {
   .trophy-workbench-grid,
   .live-preview-grid,
   .token-panel-grid,
-  .token-status-grid,
+  .token-status-strip,
   .editor-grid,
   .toggle-grid,
   .counts-editor {
@@ -1254,6 +1478,31 @@ dd {
   .panel-header-actions,
   .trophy-row-head {
     align-items: flex-start;
+  }
+
+  .modal-backdrop {
+    padding: 16px;
+  }
+
+  .token-modal {
+    width: min(780px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+  }
+
+  .token-modal-header {
+    padding-right: 56px;
+  }
+
+  .token-modal-title-row {
+    align-items: flex-start;
+  }
+
+  .token-actions {
+    justify-content: flex-start;
+  }
+
+  .token-modal-button {
+    flex: 1 1 180px;
   }
 
   .title-picker-grid,

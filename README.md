@@ -2,7 +2,32 @@
 
 Local dashboard + OBS browser-source overlays for PlayStation trophy streaming. The app uses `psn-api` as the live source of truth for overall account stats and recent titles, then layers local SQLite-backed settings and current-game overrides on top.
 
-## Run it
+## Download and run on Windows
+
+Install the packaged desktop build from GitHub Releases when you want the normal end-user experience:
+
+1. Open the latest release and download either:
+   - the Windows installer
+   - the portable `.exe`
+2. Launch **PSN Trophy Overlay Suite** from the installer or the portable executable.
+3. The desktop app starts its local backend automatically and opens its own window.
+4. Keep the app running in the tray while OBS uses these local browser-source routes:
+   - `http://127.0.0.1:4318/`
+   - `http://127.0.0.1:4318/overlay/loop`
+   - `http://127.0.0.1:4318/overlay/overall`
+   - `http://127.0.0.1:4318/overlay/current-game`
+   - `http://127.0.0.1:4318/overlay/target-trophy`
+
+Closing the main window asks whether to minimize the app to the tray or quit it. Choosing tray mode keeps the overlay URLs live. Use the tray icon to reopen the window or quit the app fully.
+
+The packaged build stores its SQLite database and PSN token in the Electron user-data directory, typically:
+
+- `%APPDATA%\\PSN Trophy Overlay Suite\\streamer-tools.sqlite`
+- `%APPDATA%\\PSN Trophy Overlay Suite\\psn-credentials.json`
+
+Uninstall removes the app binaries but leaves this user data in place by default.
+
+## Run from source
 
 ### Development
 
@@ -18,28 +43,48 @@ npm install
 npm run dev
 ```
 
-3. Open [http://localhost:5173](http://localhost:5173).
+3. Open [http://127.0.0.1:5173](http://127.0.0.1:5173).
 
 The Vite client proxies `/api/*` to the local Express server on port `4318`.
 
+### Desktop development
+
+To open the app in its own Electron window while still using the Vite renderer:
+
+```bash
+npm run dev:desktop
+```
+
+That script builds the server and Electron entrypoints once, starts the Vite dev server, launches Electron, and lets the Electron main process manage the local backend.
+
 ### Production-style local run
 
-Build the dashboard and the server, then run a single local process:
+Build the dashboard and the server, then run the local hosted app without Electron:
 
 ```bash
 npm run build
 npm start
 ```
 
-Open [http://localhost:4318](http://localhost:4318) for the dashboard.
+Open [http://127.0.0.1:4318](http://127.0.0.1:4318) for the dashboard.
 
 The same local server now hosts:
 
-- Dashboard: `http://localhost:4318/`
-- Loop overlay: `http://localhost:4318/overlay/loop`
-- Overall overlay: `http://localhost:4318/overlay/overall`
-- Current-game overlay: `http://localhost:4318/overlay/current-game`
-- Target trophy overlay: `http://localhost:4318/overlay/target-trophy`
+- Dashboard: `http://127.0.0.1:4318/`
+- Loop overlay: `http://127.0.0.1:4318/overlay/loop`
+- Overall overlay: `http://127.0.0.1:4318/overlay/overall`
+- Current-game overlay: `http://127.0.0.1:4318/overlay/current-game`
+- Target trophy overlay: `http://127.0.0.1:4318/overlay/target-trophy`
+
+### Build the Windows release locally
+
+To create the Windows installer and portable executable:
+
+```bash
+npm run dist:win
+```
+
+Electron Builder writes the packaged artifacts to `release/`.
 
 ## Configuration
 
@@ -50,21 +95,23 @@ If you ever need a fresh token, get it from:
 - `https://ca.account.sony.com/api/v1/ssocookie`
 
 When the app starts, paste the token into the PSN token field at the top of the Control Room and click `Save token`.
-It is stored only on the local machine at `~/.streamer-tools/psn-credentials.json` and is not read from `.env`.
+For source runs it is stored only on the local machine at `~/.streamer-tools/psn-credentials.json` and is not read from `.env`.
 
 The server still reads:
 
 - `PORT`: optional API port, defaults to `4318`
-- `APP_DB_PATH`: optional SQLite file path, defaults to `./streamer-tools.sqlite`
+- `APP_DB_PATH`: optional SQLite file path, defaults to `./streamer-tools.sqlite` for source runs
+- `APP_DATA_DIR`: optional base directory for packaged app runtime data
+- `PSN_CREDENTIALS_PATH`: optional override for the local PSN token file path
 
 ## Routes
 
-- Development dashboard: `http://localhost:5173/`
-- Production dashboard: `http://localhost:4318/`
-- Production loop overlay: `http://localhost:4318/overlay/loop`
-- Production overall overlay: `http://localhost:4318/overlay/overall`
-- Production current-game overlay: `http://localhost:4318/overlay/current-game`
-- Production target trophy overlay: `http://localhost:4318/overlay/target-trophy`
+- Development dashboard: `http://127.0.0.1:5173/`
+- Production dashboard: `http://127.0.0.1:4318/`
+- Production loop overlay: `http://127.0.0.1:4318/overlay/loop`
+- Production overall overlay: `http://127.0.0.1:4318/overlay/overall`
+- Production current-game overlay: `http://127.0.0.1:4318/overlay/current-game`
+- Production target trophy overlay: `http://127.0.0.1:4318/overlay/target-trophy`
 
 ## What it does
 
@@ -76,5 +123,5 @@ The server still reads:
 
 ## Notes
 
-- This is the v1 local dashboard/overlay build.
+- This is the v1 local dashboard/overlay build with a Windows Electron desktop shell.
 - The existing `trophy-panel.html`, `trophy-border.html`, and `img/` assets are left untouched as design references.

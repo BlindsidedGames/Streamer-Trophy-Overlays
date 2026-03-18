@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname } from "node:path";
 
 import {
   createDefaultActiveGameSelection,
@@ -10,6 +10,7 @@ import {
   type TargetTrophySelection,
   type UpdateTargetTrophyRequest,
 } from "../shared/contracts.js";
+import { resolveDatabasePath } from "./runtime-config.js";
 
 type AppStateRow = {
   id: number;
@@ -18,8 +19,6 @@ type AppStateRow = {
   target_trophies_json: string;
   updated_at: string;
 };
-
-const DATABASE_PATH = process.env.APP_DB_PATH ?? resolve(process.cwd(), "streamer-tools.sqlite");
 
 const sanitizeSettings = (value: unknown): OverlaySettings => {
   const defaults = createDefaultOverlaySettings();
@@ -186,7 +185,7 @@ const clampNumber = (
 export class StateStore {
   private readonly database: Database.Database;
 
-  constructor(databasePath = DATABASE_PATH) {
+  constructor(databasePath = resolveDatabasePath()) {
     mkdirSync(dirname(databasePath), { recursive: true });
     this.database = new Database(databasePath);
     this.database.pragma("journal_mode = WAL");

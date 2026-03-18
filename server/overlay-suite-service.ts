@@ -148,6 +148,10 @@ export class RealOverlaySuiteService implements OverlaySuiteService {
     };
   }
 
+  close() {
+    this.stateStore.close();
+  }
+
   private async resolveSelectedTitle(
     summary: TrophySummaryResponse,
     activeGame: ActiveGameSelection,
