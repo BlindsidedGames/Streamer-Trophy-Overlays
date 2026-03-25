@@ -18,10 +18,10 @@ rest of the token exchange internally.
 
 ### Get your NPSSO token
 
-1. In a desktop web browser, go to `https://www.playstation.com/` and sign in
+1. In a desktop web browser, go to [playstation.com](https://www.playstation.com/) and sign in
    with the PSN account you want the app to use.
 2. Stay in that same signed-in browser session, then open
-   `https://ca.account.sony.com/api/v1/ssocookie`.
+   [Sony's NPSSO endpoint](https://ca.account.sony.com/api/v1/ssocookie).
 3. Sony should return JSON that looks like this:
 
 ```json
