@@ -4,14 +4,18 @@ import { dirname } from "node:path";
 
 import {
   createDefaultActiveGameSelection,
+  createDefaultOverlayAnchors,
   createDefaultOverlaySettings,
   defaultStripZoneOrder,
   type ActiveGameSelection,
   type OverlayAnchor,
+  type OverlayAnchors,
+  type OverlayRouteKey,
   type OverlaySettings,
   type StripZoneKey,
   type TargetTrophySelection,
   type UpdateTargetTrophyRequest,
+  overlayRouteKeys,
 } from "../shared/contracts.js";
 import { resolveDatabasePath } from "./runtime-config.js";
 
@@ -28,6 +32,8 @@ type LegacyOverlaySettings = {
   showOverallCompletion?: unknown;
   showCurrentCompletion?: unknown;
   showCurrentTotals?: unknown;
+  overlayAnchor?: unknown;
+  overlayAnchors?: unknown;
 };
 
 const normalizeStripZoneOrder = (value: unknown): StripZoneKey[] => {
@@ -59,7 +65,10 @@ const normalizeStripZoneOrder = (value: unknown): StripZoneKey[] => {
   return normalized;
 };
 
-const normalizeOverlayAnchor = (value: unknown): OverlayAnchor => {
+const normalizeOverlayAnchor = (
+  value: unknown,
+  fallback: OverlayAnchor = "bottom-left",
+): OverlayAnchor => {
   switch (value) {
     case "top-left":
     case "top-right":
@@ -67,8 +76,25 @@ const normalizeOverlayAnchor = (value: unknown): OverlayAnchor => {
     case "bottom-right":
       return value;
     default:
-      return "bottom-left";
+      return fallback;
   }
+};
+
+const normalizeOverlayAnchors = (
+  value: unknown,
+  fallbackAnchor: OverlayAnchor,
+): OverlayAnchors => {
+  const defaults = createDefaultOverlayAnchors();
+  const parsed = typeof value === "object" && value !== null
+    ? (value as Partial<Record<OverlayRouteKey, unknown>>)
+    : {};
+
+  return Object.fromEntries(
+    overlayRouteKeys.map((routeKey) => [
+      routeKey,
+      normalizeOverlayAnchor(parsed[routeKey], fallbackAnchor ?? defaults[routeKey]),
+    ]),
+  ) as OverlayAnchors;
 };
 
 const sanitizeSettings = (value: unknown): OverlaySettings => {
@@ -84,6 +110,10 @@ const sanitizeSettings = (value: unknown): OverlaySettings => {
   );
   const areLegacyMetricTogglesAllFalse =
     hasLegacyMetricToggle && legacyMetricToggles.every((entry) => entry === false);
+  const legacyOverlayAnchor = normalizeOverlayAnchor(
+    parsed.overlayAnchor,
+    defaults.overlayAnchors.loop,
+  );
 
   return {
     overallDurationMs: clampNumber(parsed.overallDurationMs, defaults.overallDurationMs, 1000, 60000),
@@ -117,7 +147,7 @@ const sanitizeSettings = (value: unknown): OverlaySettings => {
     showTargetTrophyInLoop: Boolean(
       parsed.showTargetTrophyInLoop ?? defaults.showTargetTrophyInLoop,
     ),
-    overlayAnchor: normalizeOverlayAnchor(parsed.overlayAnchor),
+    overlayAnchors: normalizeOverlayAnchors(parsed.overlayAnchors, legacyOverlayAnchor),
     showTargetTrophyInfo: Boolean(
       parsed.showTargetTrophyInfo ?? defaults.showTargetTrophyInfo,
     ),

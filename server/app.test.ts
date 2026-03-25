@@ -113,7 +113,10 @@ describe("createApp", () => {
       overallDurationMs: 9000,
       showStripArtwork: false,
       stripZoneOrder: ["metrics", "trophies", "identity", "artwork", "targetInfo"],
-      overlayAnchor: "top-right",
+      overlayAnchors: {
+        ...createDefaultOverlaySettings().overlayAnchors,
+        targetTrophy: "top-right",
+      },
       showTargetTrophyInfo: false,
       showTargetTrophyTag: false,
       targetTrophyTagText: "Featured Trophy",
@@ -177,7 +180,8 @@ describe("createApp", () => {
       "artwork",
       "targetInfo",
     ]);
-    expect(response.body.overlayAnchor).toBe("top-right");
+    expect(response.body.overlayAnchors.targetTrophy).toBe("top-right");
+    expect(response.body.overlayAnchors.loop).toBe("bottom-left");
     expect(response.body.showTargetTrophyInfo).toBe(false);
     expect(response.body.showTargetTrophyTag).toBe(false);
     expect(response.body.targetTrophyTagText).toBe("Featured Trophy");

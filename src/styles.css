@@ -470,6 +470,14 @@ dd {
   background: rgba(10, 17, 28, 0.64);
 }
 
+.route-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .route-row-text {
   min-width: 0;
   overflow-x: auto;
@@ -511,6 +519,33 @@ dd {
 .route-copy-button:focus-visible {
   outline: 2px solid rgba(152, 190, 255, 0.72);
   outline-offset: 2px;
+}
+
+.route-anchor-control {
+  min-width: 160px;
+  border-radius: 12px;
+}
+
+.route-anchor-select {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid rgba(186, 205, 237, 0.18);
+  border-radius: 12px;
+  padding: 0 36px 0 12px;
+  background: transparent;
+  color: #eef3ff;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.route-anchor-select:focus-visible {
+  outline: 2px solid rgba(152, 190, 255, 0.72);
+  outline-offset: 2px;
+}
+
+.route-anchor-select option {
+  background: #111a2b;
+  color: #eef3ff;
 }
 
 .field,
@@ -2334,8 +2369,16 @@ dd {
     align-items: stretch;
   }
 
+  .route-row-actions {
+    justify-content: flex-start;
+  }
+
   .route-copy-button {
     width: fit-content;
+  }
+
+  .route-anchor-control {
+    min-width: min(100%, 220px);
   }
 
   .hero-card {

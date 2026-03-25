@@ -152,6 +152,13 @@ export const defaultStripZoneOrder = [
 ] as const;
 
 export type StripZoneKey = (typeof defaultStripZoneOrder)[number];
+export const overlayRouteKeys = [
+  "loop",
+  "targetTrophy",
+  "overall",
+  "currentGame",
+] as const;
+export type OverlayRouteKey = (typeof overlayRouteKeys)[number];
 export const overlayAnchorOptions = [
   "top-left",
   "top-right",
@@ -159,6 +166,7 @@ export const overlayAnchorOptions = [
   "bottom-right",
 ] as const;
 export type OverlayAnchor = (typeof overlayAnchorOptions)[number];
+export type OverlayAnchors = Record<OverlayRouteKey, OverlayAnchor>;
 
 export interface OverlaySettings {
   overallDurationMs: number;
@@ -170,7 +178,7 @@ export interface OverlaySettings {
   showStripTrophies: boolean;
   stripZoneOrder: StripZoneKey[];
   showTargetTrophyInLoop: boolean;
-  overlayAnchor: OverlayAnchor;
+  overlayAnchors: OverlayAnchors;
   showTargetTrophyInfo: boolean;
   showTargetTrophyTag: boolean;
   targetTrophyTagText: string;
@@ -276,6 +284,13 @@ export const createDefaultCurrentGameOverride = (): CurrentGameOverride => ({
   updatedAt: new Date(0).toISOString(),
 });
 
+export const createDefaultOverlayAnchors = (): OverlayAnchors => ({
+  loop: "bottom-left",
+  targetTrophy: "bottom-left",
+  overall: "bottom-left",
+  currentGame: "bottom-left",
+});
+
 export const createDefaultOverlaySettings = (): OverlaySettings => ({
   overallDurationMs: 5000,
   currentGameDurationMs: 12000,
@@ -286,7 +301,7 @@ export const createDefaultOverlaySettings = (): OverlaySettings => ({
   showStripTrophies: true,
   stripZoneOrder: [...defaultStripZoneOrder],
   showTargetTrophyInLoop: false,
-  overlayAnchor: "bottom-left",
+  overlayAnchors: createDefaultOverlayAnchors(),
   showTargetTrophyInfo: true,
   showTargetTrophyTag: true,
   targetTrophyTagText: "Current Target",

@@ -568,7 +568,11 @@ describe("overlay strip components", () => {
   });
 
   it("applies preview-mode anchor overrides across all overlay routes", async () => {
-    const routeAssertions = async (path: string, element: ReactElement) => {
+    const routeAssertions = async (
+      path: string,
+      routeKey: keyof typeof overlayData.display.settings.overlayAnchors,
+      element: ReactElement,
+    ) => {
       window.history.pushState({}, "", path);
 
       const { container, unmount } = render(element);
@@ -589,7 +593,10 @@ describe("overlay strip components", () => {
               overlayData,
               settings: {
                 ...overlayData.display.settings,
-                overlayAnchor: "top-right",
+                overlayAnchors: {
+                  ...overlayData.display.settings.overlayAnchors,
+                  [routeKey]: "top-right",
+                },
               },
             },
           }),
@@ -605,10 +612,18 @@ describe("overlay strip components", () => {
       unmount();
     };
 
-    await routeAssertions("/overlay/loop?dashboardPreview=1", <LoopOverlay />);
-    await routeAssertions("/overlay/overall?dashboardPreview=1", <OverallOverlay />);
-    await routeAssertions("/overlay/current-game?dashboardPreview=1", <CurrentGameOverlay />);
-    await routeAssertions("/overlay/target-trophy?dashboardPreview=1", <TargetTrophyOverlay />);
+    await routeAssertions("/overlay/loop?dashboardPreview=1", "loop", <LoopOverlay />);
+    await routeAssertions("/overlay/overall?dashboardPreview=1", "overall", <OverallOverlay />);
+    await routeAssertions(
+      "/overlay/current-game?dashboardPreview=1",
+      "currentGame",
+      <CurrentGameOverlay />,
+    );
+    await routeAssertions(
+      "/overlay/target-trophy?dashboardPreview=1",
+      "targetTrophy",
+      <TargetTrophyOverlay />,
+    );
   });
 
   it("applies preview-mode overlay data overrides in the current game route", async () => {
@@ -991,7 +1006,7 @@ describe("overlay strip components", () => {
     expect(screen.getByText("Vathreon")).toBeInTheDocument();
   });
 
-  it("uses the shared anchor setting across all live overlay routes", async () => {
+  it("uses per-route anchors across all live overlay routes", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
@@ -1002,36 +1017,57 @@ describe("overlay strip components", () => {
             ...overlayData.display,
             settings: {
               ...overlayData.display.settings,
-              overlayAnchor: "top-right",
+              overlayAnchors: {
+                ...overlayData.display.settings.overlayAnchors,
+                loop: "top-right",
+                overall: "bottom-left",
+                currentGame: "bottom-right",
+                targetTrophy: "top-left",
+              },
             },
           },
         }),
       })),
     );
 
-    const routeAssertions = async (path: string, element: ReactElement) => {
+    const routeAssertions = async (
+      path: string,
+      expectedSceneClass: string,
+      expectedHorizontalAnchor: "left" | "right",
+      element: ReactElement,
+    ) => {
       window.history.pushState({}, "", path);
       const { container, unmount } = render(element);
       await flushEffects();
-      expect(container.querySelector(".overlay-scene-anchor-top-right")).not.toBeNull();
+      expect(container.querySelector(expectedSceneClass)).not.toBeNull();
       expect(getAnchorShell(container)).toHaveAttribute(
         "data-overlay-horizontal-anchor",
-        "right",
+        expectedHorizontalAnchor,
       );
       expect(getPrimaryOverlayShell(container)).toHaveAttribute(
         "data-overlay-horizontal-anchor",
-        "right",
+        expectedHorizontalAnchor,
       );
       unmount();
     };
 
-    await routeAssertions("/overlay/loop", <LoopOverlay />);
-    await routeAssertions("/overlay/overall", <OverallOverlay />);
-    await routeAssertions("/overlay/current-game", <CurrentGameOverlay />);
-    await routeAssertions("/overlay/target-trophy", <TargetTrophyOverlay />);
+    await routeAssertions("/overlay/loop", ".overlay-scene-anchor-top-right", "right", <LoopOverlay />);
+    await routeAssertions("/overlay/overall", ".overlay-scene-anchor-bottom-left", "left", <OverallOverlay />);
+    await routeAssertions(
+      "/overlay/current-game",
+      ".overlay-scene-anchor-bottom-right",
+      "right",
+      <CurrentGameOverlay />,
+    );
+    await routeAssertions(
+      "/overlay/target-trophy",
+      ".overlay-scene-anchor-top-left",
+      "left",
+      <TargetTrophyOverlay />,
+    );
   });
 
-  it("keeps left-side anchors on the left across all live overlay routes", async () => {
+  it("keeps left-side per-route anchors on the left across all live overlay routes", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
@@ -1042,18 +1078,28 @@ describe("overlay strip components", () => {
             ...overlayData.display,
             settings: {
               ...overlayData.display.settings,
-              overlayAnchor: "bottom-left",
+              overlayAnchors: {
+                ...overlayData.display.settings.overlayAnchors,
+                loop: "bottom-left",
+                overall: "top-left",
+                currentGame: "bottom-left",
+                targetTrophy: "top-left",
+              },
             },
           },
         }),
       })),
     );
 
-    const routeAssertions = async (path: string, element: ReactElement) => {
+    const routeAssertions = async (
+      path: string,
+      expectedSceneClass: string,
+      element: ReactElement,
+    ) => {
       window.history.pushState({}, "", path);
       const { container, unmount } = render(element);
       await flushEffects();
-      expect(container.querySelector(".overlay-scene-anchor-bottom-left")).not.toBeNull();
+      expect(container.querySelector(expectedSceneClass)).not.toBeNull();
       expect(getAnchorShell(container)).toHaveAttribute(
         "data-overlay-horizontal-anchor",
         "left",
@@ -1065,10 +1111,18 @@ describe("overlay strip components", () => {
       unmount();
     };
 
-    await routeAssertions("/overlay/loop", <LoopOverlay />);
-    await routeAssertions("/overlay/overall", <OverallOverlay />);
-    await routeAssertions("/overlay/current-game", <CurrentGameOverlay />);
-    await routeAssertions("/overlay/target-trophy", <TargetTrophyOverlay />);
+    await routeAssertions("/overlay/loop", ".overlay-scene-anchor-bottom-left", <LoopOverlay />);
+    await routeAssertions("/overlay/overall", ".overlay-scene-anchor-top-left", <OverallOverlay />);
+    await routeAssertions(
+      "/overlay/current-game",
+      ".overlay-scene-anchor-bottom-left",
+      <CurrentGameOverlay />,
+    );
+    await routeAssertions(
+      "/overlay/target-trophy",
+      ".overlay-scene-anchor-top-left",
+      <TargetTrophyOverlay />,
+    );
   });
 
   it("renders the loop target trophy card with the loop variant when enabled", async () => {
@@ -1275,7 +1329,13 @@ describe("overlay strip components", () => {
             ...overlayData.display,
             settings: {
               ...overlayData.display.settings,
-              overlayAnchor: "bottom-right",
+              overlayAnchors: {
+                ...overlayData.display.settings.overlayAnchors,
+                loop: "bottom-right",
+                overall: "bottom-right",
+                currentGame: "bottom-right",
+                targetTrophy: "bottom-right",
+              },
             },
           },
         }),
@@ -1316,7 +1376,10 @@ describe("overlay strip components", () => {
             ...overlayData.display,
             settings: {
               ...overlayData.display.settings,
-              overlayAnchor: "bottom-right",
+              overlayAnchors: {
+                ...overlayData.display.settings.overlayAnchors,
+                targetTrophy: "bottom-right",
+              },
             },
           },
         }),

@@ -13,6 +13,7 @@ import type {
   OverlayCurrentGameCard,
   OverlayDataResponse,
   OverlayOverallCard,
+  OverlayRouteKey,
   OverlaySettings,
   OverlayTargetTrophyCard,
   OverlayView,
@@ -794,6 +795,11 @@ const applyPreviewSettings = (
   },
 });
 
+const resolveRouteOverlayAnchor = (
+  settings: Pick<OverlaySettings, "overlayAnchors">,
+  routeKey: OverlayRouteKey,
+) => settings.overlayAnchors[routeKey];
+
 const resolveOverlayAnchorClassName = (anchor: OverlayAnchor) => {
   switch (anchor) {
     case "top-left":
@@ -885,10 +891,12 @@ export function LoopOverlay() {
     return <div className="overlay-scene overlay-loading">Loading overlay...</div>;
   }
 
+  const routeAnchor = resolveRouteOverlayAnchor(overlayData.display.settings, "loop");
+
   return (
     <div
       className={resolveOverlaySceneClassName({
-        anchor: overlayData.display.settings.overlayAnchor,
+        anchor: routeAnchor,
         previewEnabled,
       })}
     >
@@ -944,9 +952,8 @@ export function LoopOverlayView({
   const overallDurationMs = displayData.display.settings.overallDurationMs;
   const currentGameDurationMs = displayData.display.settings.currentGameDurationMs;
   const targetTrophyDurationMs = displayData.display.settings.targetTrophyDurationMs;
-  const horizontalAnchor = resolveOverlayHorizontalAnchor(
-    displayData.display.settings.overlayAnchor,
-  );
+  const routeAnchor = resolveRouteOverlayAnchor(displayData.display.settings, "loop");
+  const horizontalAnchor = resolveOverlayHorizontalAnchor(routeAnchor);
 
   useEffect(() => {
     if (isTransitioning) {
@@ -1082,7 +1089,7 @@ export function LoopOverlayView({
 
   const content = (
     <>
-      <OverlayAnchorShell anchor={displayData.display.settings.overlayAnchor}>
+      <OverlayAnchorShell anchor={routeAnchor}>
         <div
           className="overlay-strip-shell"
           data-loop-shell-width={resolvedLoopWidth ?? undefined}
@@ -1142,7 +1149,7 @@ export function LoopOverlayView({
   return (
     <div
       className={resolveOverlaySceneClassName({
-        anchor: displayData.display.settings.overlayAnchor,
+        anchor: routeAnchor,
         previewEnabled,
       })}
     >
@@ -1159,20 +1166,20 @@ export function OverallOverlay() {
     return <div className="overlay-scene overlay-loading">Loading overlay...</div>;
   }
 
+  const routeAnchor = resolveRouteOverlayAnchor(overlayData.display.settings, "overall");
+
   return (
     <div
       className={resolveOverlaySceneClassName({
-        anchor: overlayData.display.settings.overlayAnchor,
+        anchor: routeAnchor,
         previewEnabled,
       })}
     >
       <OverlayPreviewStage enabled={previewEnabled} reportSignal={overlayData}>
-        <OverlayAnchorShell anchor={overlayData.display.settings.overlayAnchor}>
+        <OverlayAnchorShell anchor={routeAnchor}>
           <div
             className="overlay-strip-shell"
-            data-overlay-horizontal-anchor={resolveOverlayHorizontalAnchor(
-              overlayData.display.settings.overlayAnchor,
-            )}
+            data-overlay-horizontal-anchor={resolveOverlayHorizontalAnchor(routeAnchor)}
           >
             {renderOverlayCard(overlayData, "overall")}
           </div>
@@ -1190,20 +1197,20 @@ export function CurrentGameOverlay() {
     return <div className="overlay-scene overlay-loading">Loading overlay...</div>;
   }
 
+  const routeAnchor = resolveRouteOverlayAnchor(overlayData.display.settings, "currentGame");
+
   return (
     <div
       className={resolveOverlaySceneClassName({
-        anchor: overlayData.display.settings.overlayAnchor,
+        anchor: routeAnchor,
         previewEnabled,
       })}
     >
       <OverlayPreviewStage enabled={previewEnabled} reportSignal={overlayData}>
-        <OverlayAnchorShell anchor={overlayData.display.settings.overlayAnchor}>
+        <OverlayAnchorShell anchor={routeAnchor}>
           <div
             className="overlay-strip-shell"
-            data-overlay-horizontal-anchor={resolveOverlayHorizontalAnchor(
-              overlayData.display.settings.overlayAnchor,
-            )}
+            data-overlay-horizontal-anchor={resolveOverlayHorizontalAnchor(routeAnchor)}
           >
             {renderOverlayCard(overlayData, "currentGame")}
           </div>
@@ -1221,20 +1228,20 @@ export function TargetTrophyOverlay() {
     return <div className="overlay-scene overlay-loading">Loading overlay...</div>;
   }
 
+  const routeAnchor = resolveRouteOverlayAnchor(overlayData.display.settings, "targetTrophy");
+
   return (
     <div
       className={resolveOverlaySceneClassName({
-        anchor: overlayData.display.settings.overlayAnchor,
+        anchor: routeAnchor,
         previewEnabled,
       })}
     >
       <OverlayPreviewStage enabled={previewEnabled} reportSignal={overlayData}>
-        <OverlayAnchorShell anchor={overlayData.display.settings.overlayAnchor}>
+        <OverlayAnchorShell anchor={routeAnchor}>
           <div
             className="target-trophy-overlay-shell"
-            data-overlay-horizontal-anchor={resolveOverlayHorizontalAnchor(
-              overlayData.display.settings.overlayAnchor,
-            )}
+            data-overlay-horizontal-anchor={resolveOverlayHorizontalAnchor(routeAnchor)}
             style={intrinsicWidthShellStyle}
           >
             <TargetTrophyCard

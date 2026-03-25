@@ -38,7 +38,12 @@ describe("StateStore", () => {
       "trophies",
       "targetInfo",
     ]);
-    expect(defaults.overlayAnchor).toBe("bottom-left");
+    expect(defaults.overlayAnchors).toEqual({
+      loop: "bottom-left",
+      targetTrophy: "bottom-left",
+      overall: "bottom-left",
+      currentGame: "bottom-left",
+    });
     expect(defaults.showTargetTrophyInfo).toBe(true);
     expect(defaults.showTargetTrophyTag).toBe(true);
     expect(defaults.targetTrophyTagText).toBe("Current Target");
@@ -49,7 +54,12 @@ describe("StateStore", () => {
       stripZoneOrder: ["metrics", "identity", "artwork", "trophies", "targetInfo"],
       overallDurationMs: 9000,
       targetTrophyDurationMs: 15000,
-      overlayAnchor: "top-right",
+      overlayAnchors: {
+        loop: "top-right",
+        targetTrophy: "bottom-right",
+        overall: "top-left",
+        currentGame: "bottom-left",
+      },
       showTargetTrophyInfo: false,
       showTargetTrophyTag: false,
       targetTrophyTagText: "Featured Trophy",
@@ -68,7 +78,12 @@ describe("StateStore", () => {
       "trophies",
       "targetInfo",
     ]);
-    expect(persisted.overlayAnchor).toBe("top-right");
+    expect(persisted.overlayAnchors).toEqual({
+      loop: "top-right",
+      targetTrophy: "bottom-right",
+      overall: "top-left",
+      currentGame: "bottom-left",
+    });
     expect(persisted.showTargetTrophyInfo).toBe(false);
     expect(persisted.showTargetTrophyTag).toBe(false);
     expect(persisted.targetTrophyTagText).toBe("Featured Trophy");
@@ -102,6 +117,7 @@ describe("StateStore", () => {
           showCurrentCompletion: false,
           showCurrentTotals: false,
           showTargetTrophyInLoop: true,
+          overlayAnchor: "top-right",
           showTargetTrophyTag: true,
           targetTrophyTagText: "Featured Trophy",
           updatedAt: "2026-03-18T00:00:00Z",
@@ -124,7 +140,12 @@ describe("StateStore", () => {
       "targetInfo",
     ]);
     expect(migrated.showTargetTrophyInLoop).toBe(true);
-    expect(migrated.overlayAnchor).toBe("bottom-left");
+    expect(migrated.overlayAnchors).toEqual({
+      loop: "top-right",
+      targetTrophy: "top-right",
+      overall: "top-right",
+      currentGame: "top-right",
+    });
     expect(migrated.showTargetTrophyInfo).toBe(true);
     expect(migrated.targetTrophyTagText).toBe("Featured Trophy");
     reopened.close();
@@ -163,6 +184,45 @@ describe("StateStore", () => {
       "identity",
       "targetInfo",
     ]);
+    reopened.close();
+  });
+
+  it("normalizes partial per-route anchors using the legacy anchor as fallback", () => {
+    const directory = mkdtempSync(join(tmpdir(), "streamer-tools-store-"));
+    tempPaths.push(directory);
+    const databasePath = join(directory, "app.sqlite");
+
+    const store = new StateStore(databasePath);
+    store.close();
+
+    const database = new Database(databasePath);
+    database
+      .prepare(
+        `
+          UPDATE app_state
+          SET settings_json = @settings_json
+          WHERE id = 1
+        `,
+      )
+      .run({
+        settings_json: JSON.stringify({
+          ...createDefaultOverlaySettings(),
+          overlayAnchor: "top-left",
+          overlayAnchors: {
+            loop: "bottom-right",
+            overall: "not-a-real-anchor",
+          },
+        }),
+      });
+    database.close();
+
+    const reopened = new StateStore(databasePath);
+    expect(reopened.getSettings().overlayAnchors).toEqual({
+      loop: "bottom-right",
+      targetTrophy: "top-left",
+      overall: "top-left",
+      currentGame: "top-left",
+    });
     reopened.close();
   });
 

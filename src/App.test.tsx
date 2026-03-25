@@ -961,7 +961,11 @@ describe("DashboardApp", () => {
     expect(within(setupPanel).getByText("Show title and platform")).toBeInTheDocument();
     expect(within(setupPanel).getByText("Show progress and earned totals")).toBeInTheDocument();
     expect(within(setupPanel).getByText("Show trophy counts")).toBeInTheDocument();
-    expect(within(setupPanel).getByLabelText("Overlay anchor")).toBeInTheDocument();
+    expect(within(setupPanel).queryByLabelText("Overlay anchor")).not.toBeInTheDocument();
+    expect(within(setupPanel).getByRole("combobox", { name: "Loop anchor" })).toBeInTheDocument();
+    expect(within(setupPanel).getByRole("combobox", { name: "Target trophy anchor" })).toBeInTheDocument();
+    expect(within(setupPanel).getByRole("combobox", { name: "Overall anchor" })).toBeInTheDocument();
+    expect(within(setupPanel).getByRole("combobox", { name: "Current game anchor" })).toBeInTheDocument();
     expect(within(setupPanel).getByText("Show target info")).toBeInTheDocument();
     const controlsStack = previewSurface.querySelector(".setup-controls-stack") as HTMLElement;
     expect(controlsStack).toBeTruthy();
@@ -970,17 +974,20 @@ describe("DashboardApp", () => {
     const fieldLabels = Array.from(
       previewSurface.querySelectorAll(".setup-config-fields .field > span:first-child"),
     ).map((field) => field.textContent?.trim());
+    const previewBlocks = Array.from(
+      previewSurface.querySelectorAll(".overlay-preview-block"),
+    ) as HTMLDivElement[];
     expect(fieldLabels).toEqual([
       "Overall duration (ms)",
       "Current game duration (ms)",
       "Target trophy duration (ms)",
       "Target trophy tag text",
-      "Overlay anchor",
     ]);
+    const loopAnchorSelect = within(previewBlocks[0] as HTMLElement).getByRole("combobox", {
+      name: "Loop anchor",
+    }) as HTMLSelectElement;
     expect(
-      within(within(setupPanel).getByLabelText("Overlay anchor").closest("label") as HTMLElement)
-        .getAllByRole("option")
-        .map((option) => option.textContent),
+      Array.from(loopAnchorSelect.options).map((option) => option.textContent),
     ).toEqual(["Top-left", "Top-right", "Bottom-left", "Bottom-right"]);
     const toggleLabels = Array.from(
       previewSurface.querySelectorAll(".settings-toggle-grid .toggle-field"),
@@ -1008,10 +1015,8 @@ describe("DashboardApp", () => {
     expect(within(setupPanel).getByRole("button", { name: "Copy target trophy URL" })).toBeInTheDocument();
     expect(within(setupPanel).getByRole("button", { name: "Copy overall URL" })).toBeInTheDocument();
     expect(within(setupPanel).getByRole("button", { name: "Copy current game URL" })).toBeInTheDocument();
-    const previewBlocks = Array.from(
-      previewSurface.querySelectorAll(".overlay-preview-block"),
-    ) as HTMLDivElement[];
     expect(previewBlocks[0]?.querySelector('[title="Loop preview"]')).not.toBeNull();
+    expect(previewBlocks[0]?.querySelector(".route-row-actions")).not.toBeNull();
     const reorderChips = Array.from(
       previewSurface.querySelectorAll(".strip-order-chip"),
     ) as HTMLDivElement[];
@@ -1257,12 +1262,14 @@ describe("DashboardApp", () => {
     expect(targetInfoRow).toHaveClass("is-muted");
   });
 
-  it("persists overlay anchor changes immediately", async () => {
+  it("persists per-route anchor changes immediately", async () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("tab", { name: "Setup" }));
 
     const setupPanel = await screen.findByRole("tabpanel", { name: "Setup" });
-    const select = within(setupPanel).getByLabelText("Overlay anchor") as HTMLSelectElement;
+    const select = within(setupPanel).getByRole("combobox", {
+      name: "Target trophy anchor",
+    }) as HTMLSelectElement;
 
     fireEvent.change(select, { target: { value: "top-right" } });
 
@@ -1271,7 +1278,9 @@ describe("DashboardApp", () => {
         ([input, init]) => input === "/api/settings" && (init?.method ?? "GET") === "PUT",
       );
       expect(putCalls).toHaveLength(1);
-      expect(JSON.parse(String(putCalls[0]?.[1]?.body)).overlayAnchor).toBe("top-right");
+      const payload = JSON.parse(String(putCalls[0]?.[1]?.body));
+      expect(payload.overlayAnchors.targetTrophy).toBe("top-right");
+      expect(payload.overlayAnchors.loop).toBe("bottom-left");
     });
   });
 

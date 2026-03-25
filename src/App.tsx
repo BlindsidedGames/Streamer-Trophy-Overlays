@@ -12,6 +12,7 @@ import type {
   ActiveGameSelection,
   OverlayAnchor,
   OverlayDataResponse,
+  OverlayRouteKey,
   OverlaySettings,
   PsnTokenStatusResponse,
   TargetTrophySelection,
@@ -121,6 +122,47 @@ const overlayAnchorLabels: Record<OverlayAnchor, string> = {
   "bottom-left": "Bottom-left",
   "bottom-right": "Bottom-right",
 };
+const overlayRoutePreviewConfigs = [
+  {
+    key: "loop",
+    routeLabel: "Loop",
+    copyLabel: "Copy loop URL",
+    urlPath: "/overlay/loop",
+    previewTitle: "Loop preview",
+    viewportHeight: 220,
+  },
+  {
+    key: "targetTrophy",
+    routeLabel: "Target trophy",
+    copyLabel: "Copy target trophy URL",
+    urlPath: "/overlay/target-trophy",
+    previewTitle: "Target trophy preview",
+    viewportHeight: 220,
+  },
+  {
+    key: "overall",
+    routeLabel: "Overall",
+    copyLabel: "Copy overall URL",
+    urlPath: "/overlay/overall",
+    previewTitle: "Overall preview",
+    viewportHeight: 220,
+  },
+  {
+    key: "currentGame",
+    routeLabel: "Current game",
+    copyLabel: "Copy current game URL",
+    urlPath: "/overlay/current-game",
+    previewTitle: "Current game preview",
+    viewportHeight: 220,
+  },
+] as const satisfies ReadonlyArray<{
+  key: OverlayRouteKey;
+  routeLabel: string;
+  copyLabel: string;
+  urlPath: string;
+  previewTitle: string;
+  viewportHeight: number;
+}>;
 
 const copyText = async (value: string) => {
   try {
@@ -387,7 +429,7 @@ function DashboardApp() {
   const [savingAdvancedGame, setSavingAdvancedGame] = useState(false);
   const [draggedStripZone, setDraggedStripZone] = useState<StripZoneKey | null>(null);
   const [dropStripIndex, setDropStripIndex] = useState<number | null>(null);
-  const [copiedRouteKey, setCopiedRouteKey] = useState<string | null>(null);
+  const [copiedRouteKey, setCopiedRouteKey] = useState<OverlayRouteKey | null>(null);
   const settingsRef = useRef(settings);
   const pendingSettingsSaveTimeoutRef = useRef<number | null>(null);
   const settingsEditVersionRef = useRef(0);
@@ -848,7 +890,7 @@ function DashboardApp() {
     }, SETTINGS_SAVE_DEBOUNCE_MS);
   };
 
-  const copyRouteUrl = async (routeKey: string, url: string) => {
+  const copyRouteUrl = async (routeKey: OverlayRouteKey, url: string) => {
     const copied = await copyText(url);
 
     if (!copied) {
@@ -1248,23 +1290,6 @@ function DashboardApp() {
                               }, "debounced")
                       }
                     />
-                    <SelectField
-                      label="Overlay anchor"
-                      value={settings.overlayAnchor}
-                      options={overlayAnchorOptions.map((anchor) => ({
-                        value: anchor,
-                        label: overlayAnchorLabels[anchor],
-                      }))}
-                      onChange={(value) =>
-                        updateSettingsWithPersistence((current) =>
-                          value === current.overlayAnchor
-                            ? current
-                            : {
-                                ...current,
-                                overlayAnchor: value,
-                              }, "immediate")
-                      }
-                    />
                   </div>
 
                   <div className="toggle-grid settings-toggle-grid">
@@ -1428,73 +1453,41 @@ function DashboardApp() {
               </div>
 
               <div className="setup-preview-stack">
-                <div className="overlay-preview-block">
-                  <RouteRow
-                    copied={copiedRouteKey === "loop"}
-                    copyLabel="Copy loop URL"
-                    onCopy={() => void copyRouteUrl("loop", `${overlayUrlBase}/overlay/loop`)}
-                    url={`${overlayUrlBase}/overlay/loop`}
-                  />
-                  <EmbeddedOverlayPreview
-                    title="Loop preview"
-                    srcPath="/overlay/loop"
-                    overlayData={overlayData}
-                    settings={settings}
-                    viewportHeight={220}
-                  />
-                </div>
+                {overlayRoutePreviewConfigs.map((route) => {
+                  const url = `${overlayUrlBase}${route.urlPath}`;
 
-                <div className="overlay-preview-block">
-                  <RouteRow
-                    copied={copiedRouteKey === "target-trophy"}
-                    copyLabel="Copy target trophy URL"
-                    onCopy={() =>
-                      void copyRouteUrl("target-trophy", `${overlayUrlBase}/overlay/target-trophy`)
-                    }
-                    url={`${overlayUrlBase}/overlay/target-trophy`}
-                  />
-                  <EmbeddedOverlayPreview
-                    title="Target trophy preview"
-                    srcPath="/overlay/target-trophy"
-                    overlayData={overlayData}
-                    settings={settings}
-                    viewportHeight={220}
-                  />
-                </div>
-
-                <div className="overlay-preview-block">
-                  <RouteRow
-                    copied={copiedRouteKey === "overall"}
-                    copyLabel="Copy overall URL"
-                    onCopy={() => void copyRouteUrl("overall", `${overlayUrlBase}/overlay/overall`)}
-                    url={`${overlayUrlBase}/overlay/overall`}
-                  />
-                  <EmbeddedOverlayPreview
-                    title="Overall preview"
-                    srcPath="/overlay/overall"
-                    overlayData={overlayData}
-                    settings={settings}
-                    viewportHeight={220}
-                  />
-                </div>
-
-                <div className="overlay-preview-block">
-                  <RouteRow
-                    copied={copiedRouteKey === "current-game"}
-                    copyLabel="Copy current game URL"
-                    onCopy={() =>
-                      void copyRouteUrl("current-game", `${overlayUrlBase}/overlay/current-game`)
-                    }
-                    url={`${overlayUrlBase}/overlay/current-game`}
-                  />
-                  <EmbeddedOverlayPreview
-                    title="Current game preview"
-                    srcPath="/overlay/current-game"
-                    overlayData={overlayData}
-                    settings={settings}
-                    viewportHeight={220}
-                  />
-                </div>
+                  return (
+                    <div className="overlay-preview-block" key={route.key}>
+                      <RouteRow
+                        anchor={settings.overlayAnchors[route.key]}
+                        anchorLabel={`${route.routeLabel} anchor`}
+                        copied={copiedRouteKey === route.key}
+                        copyLabel={route.copyLabel}
+                        onAnchorChange={(value) =>
+                          updateSettingsWithPersistence((current) =>
+                            value === current.overlayAnchors[route.key]
+                              ? current
+                              : {
+                                  ...current,
+                                  overlayAnchors: {
+                                    ...current.overlayAnchors,
+                                    [route.key]: value,
+                                  },
+                                }, "immediate")
+                        }
+                        onCopy={() => void copyRouteUrl(route.key, url)}
+                        url={url}
+                      />
+                      <EmbeddedOverlayPreview
+                        title={route.previewTitle}
+                        srcPath={route.urlPath}
+                        overlayData={overlayData}
+                        settings={settings}
+                        viewportHeight={route.viewportHeight}
+                      />
+                    </div>
+                  );
+                })}
               </div>
             </section>
 
@@ -2280,27 +2273,49 @@ function TrophyCard({
 }
 
 function RouteRow({
+  anchor,
+  anchorLabel,
   copied,
   copyLabel,
+  onAnchorChange,
   onCopy,
   url,
 }: {
+  anchor: OverlayAnchor;
+  anchorLabel: string;
   copied: boolean;
   copyLabel: string;
+  onAnchorChange: (value: OverlayAnchor) => void;
   onCopy: () => void;
   url: string;
 }) {
   return (
     <div className="route-row">
       <span className="route-row-text">{url}</span>
-      <button
-        type="button"
-        className="route-copy-button"
-        aria-label={copyLabel}
-        onClick={onCopy}
-      >
-        {copied ? "Copied" : "Copy"}
-      </button>
+      <div className="route-row-actions">
+        <button
+          type="button"
+          className="route-copy-button"
+          aria-label={copyLabel}
+          onClick={onCopy}
+        >
+          {copied ? "Copied" : "Copy"}
+        </button>
+        <div className="select-field-control route-anchor-control">
+          <select
+            className="route-anchor-select"
+            aria-label={anchorLabel}
+            value={anchor}
+            onChange={(event) => onAnchorChange(event.target.value as OverlayAnchor)}
+          >
+            {overlayAnchorOptions.map((option) => (
+              <option key={option} value={option}>
+                {overlayAnchorLabels[option]}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2341,33 +2356,6 @@ function NumberField({
           onChange(event.target.value === "" ? null : Number(event.target.value))
         }
       />
-    </label>
-  );
-}
-
-function SelectField<T extends string>({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: T;
-  options: { value: T; label: string }[];
-  onChange: (value: T) => void;
-}) {
-  return (
-    <label className="field select-field">
-      <span>{label}</span>
-      <div className="select-field-control">
-        <select value={value} onChange={(event) => onChange(event.target.value as T)}>
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </div>
     </label>
   );
 }
