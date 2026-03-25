@@ -107,6 +107,24 @@ export const createApp = (
     }
   });
 
+  app.get("/api/trophies/unearned", async (_request, response) => {
+    try {
+      const unearnedTrophies = await service.getUnearnedTrophies();
+      response.json(unearnedTrophies);
+    } catch (error) {
+      response.status(500).json({
+        trophies: [],
+        meta: {
+          fetchedAt: new Date().toISOString(),
+          cached: false,
+          warnings: [],
+          partial: false,
+        },
+        error: toApiErrorPayload(error),
+      });
+    }
+  });
+
   app.get("/api/settings", (_request, response) => {
     response.json(service.getSettings());
   });

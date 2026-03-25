@@ -124,6 +124,35 @@ const createSummaryService = (summary: TrophySummaryResponse) => ({
       partial: false,
     },
   }),
+  getUnearnedTrophies: async () => ({
+    trophies: [
+      {
+        npCommunicationId: "NPWR1",
+        trophyId: 1,
+        trophyGroupId: "default",
+        name: "Best in Show",
+        description: "Earn every trophy in Bluey.",
+        iconUrl: "https://example.com/trophy.png",
+        grade: "platinum" as const,
+        earned: false as const,
+        earnedAt: null,
+        hidden: false,
+        groupName: null,
+        trophyRare: 1,
+        trophyEarnedRate: 11.1,
+        titleName: "Bluey",
+        titleIconUrl: "https://example.com/bluey.png",
+        platform: "PS5",
+        titleLastUpdated: "2026-03-17T00:00:00Z",
+      },
+    ],
+    meta: {
+      fetchedAt: "2026-03-17T00:00:00Z",
+      cached: false,
+      warnings: [],
+      partial: false,
+    },
+  }),
   searchTitles: async (): Promise<TitleSearchResponse> => ({
     results: [],
     nextOffset: null,
@@ -260,6 +289,27 @@ describe("RealOverlaySuiteService", () => {
       "currentGame",
       "targetTrophy",
     ]);
+    store.close();
+  });
+
+  it("marks aggregated unearned trophies that are stored as targets", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "streamer-tools-overlay-"));
+    tempPaths.push(directory);
+    const store = new StateStore(join(directory, "app.sqlite"));
+    store.saveTargetTrophy({
+      npCommunicationId: "NPWR1",
+      trophyId: 1,
+      trophyGroupId: "default",
+    });
+
+    const service = new RealOverlaySuiteService(
+      createSummaryService(createSummary()),
+      store,
+    );
+
+    const response = await service.getUnearnedTrophies();
+
+    expect(response.trophies[0]?.target).toBe(true);
     store.close();
   });
 

@@ -51,6 +51,15 @@ describe("server runtime", () => {
             partial: false,
           },
         }),
+        getUnearnedTrophies: async () => ({
+          trophies: [],
+          meta: {
+            fetchedAt: "2026-03-18T00:00:00Z",
+            cached: false,
+            warnings: [],
+            partial: false,
+          },
+        }),
         getSettings: () => ({
           overallDurationMs: 5000,
           currentGameDurationMs: 5000,
@@ -189,6 +198,15 @@ describe("server runtime", () => {
             title: null,
             trophies: [],
             target: null,
+            meta: {
+              fetchedAt: "2026-03-18T00:00:00Z",
+              cached: false,
+              warnings: [],
+              partial: false,
+            },
+          }),
+          getUnearnedTrophies: async () => ({
+            trophies: [],
             meta: {
               fetchedAt: "2026-03-18T00:00:00Z",
               cached: false,

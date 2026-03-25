@@ -220,6 +220,8 @@ describe("normalizeTrophyBrowserItem", () => {
       earnedAt: "2026-03-17T01:02:03Z",
       hidden: false,
       groupName: "Main Set",
+      trophyRare: 3,
+      trophyEarnedRate: 12.3,
     });
   });
 });

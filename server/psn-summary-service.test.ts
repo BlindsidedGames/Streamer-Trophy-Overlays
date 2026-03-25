@@ -382,4 +382,279 @@ describe("RealPsnSummaryService", () => {
       type: "missing_token",
     });
   });
+
+  it("aggregates unearned trophies with title context and earned rate", async () => {
+    mockGetUserTrophyProfileSummary.mockResolvedValue({
+      accountId: "123",
+      trophyLevel: "500",
+      progress: 44,
+      tier: 6,
+      earnedTrophies: {
+        bronze: 100,
+        silver: 50,
+        gold: 10,
+        platinum: 5,
+      },
+    });
+    mockGetProfileFromAccountId.mockResolvedValue({
+      onlineId: "mattr",
+      aboutMe: "",
+      avatars: [{ size: "m", url: "https://example.com/avatar.png" }],
+      languages: ["en"],
+      isPlus: true,
+      isOfficiallyVerified: false,
+      isMe: true,
+    });
+    mockGetUserTitles.mockResolvedValue({
+      trophyTitles: [
+        {
+          npServiceName: "trophy2",
+          npCommunicationId: "NPWR1",
+          trophySetVersion: "01.00",
+          trophyTitleName: "Bluey",
+          trophyTitleIconUrl: "https://example.com/bluey.png",
+          trophyTitlePlatform: "PS5",
+          hasTrophyGroups: false,
+          definedTrophies: { bronze: 2, silver: 1, gold: 1, platinum: 1 },
+          progress: 60,
+          earnedTrophies: { bronze: 1, silver: 1, gold: 0, platinum: 0 },
+          hiddenFlag: false,
+          lastUpdatedDateTime: "2026-03-17T00:00:00Z",
+        },
+        {
+          npServiceName: "trophy2",
+          npCommunicationId: "NPWR2",
+          trophySetVersion: "01.00",
+          trophyTitleName: "Astro Bot",
+          trophyTitleIconUrl: "https://example.com/astro.png",
+          trophyTitlePlatform: "PS5",
+          hasTrophyGroups: false,
+          definedTrophies: { bronze: 1, silver: 0, gold: 1, platinum: 0 },
+          progress: 50,
+          earnedTrophies: { bronze: 1, silver: 0, gold: 0, platinum: 0 },
+          hiddenFlag: false,
+          lastUpdatedDateTime: "2026-03-16T00:00:00Z",
+        },
+      ],
+      totalItemCount: 2,
+    });
+    mockGetTitleTrophies.mockImplementation(async (_authorization, npCommunicationId: string) => ({
+      trophies:
+        npCommunicationId === "NPWR1"
+          ? [
+              {
+                trophyId: 1,
+                trophyHidden: false,
+                trophyType: "platinum",
+                trophyName: "Best in Show",
+                trophyDetail: "Earn every trophy in Bluey.",
+                trophyIconUrl: "https://example.com/best.png",
+                trophyGroupId: "default",
+              },
+              {
+                trophyId: 2,
+                trophyHidden: false,
+                trophyType: "silver",
+                trophyName: "Family Photo",
+                trophyDetail: "Frame every memory.",
+                trophyIconUrl: "https://example.com/family.png",
+                trophyGroupId: "default",
+              },
+            ]
+          : [
+              {
+                trophyId: 3,
+                trophyHidden: true,
+                trophyType: "gold",
+                trophyName: "Galaxy Champion",
+                trophyDetail: "Save the stars.",
+                trophyIconUrl: "https://example.com/galaxy.png",
+                trophyGroupId: "default",
+              },
+            ],
+    }));
+    mockGetUserTrophiesEarnedForTitle.mockImplementation(
+      async (_authorization, _accountId, npCommunicationId: string) => ({
+        trophySetVersion: "01.00",
+        hasTrophyGroups: false,
+        lastUpdatedDateTime: "2026-03-17T00:00:00Z",
+        totalItemCount: 2,
+        trophies:
+          npCommunicationId === "NPWR1"
+            ? [
+                {
+                  trophyId: 1,
+                  trophyHidden: false,
+                  earned: false,
+                  trophyType: "platinum",
+                  trophyRare: 1,
+                  trophyEarnedRate: "11.1",
+                  trophyProgressTargetValue: undefined,
+                  trophyRewardImageUrl: undefined,
+                  trophyRewardName: undefined,
+                },
+                {
+                  trophyId: 2,
+                  trophyHidden: false,
+                  earned: true,
+                  earnedDateTime: "2026-03-17T00:00:00Z",
+                  trophyType: "silver",
+                  trophyRare: 3,
+                  trophyEarnedRate: "58.8",
+                  trophyProgressTargetValue: undefined,
+                  trophyRewardImageUrl: undefined,
+                  trophyRewardName: undefined,
+                },
+              ]
+            : [
+                {
+                  trophyId: 3,
+                  trophyHidden: true,
+                  earned: false,
+                  trophyType: "gold",
+                  trophyRare: 2,
+                  trophyEarnedRate: "22.2",
+                  trophyProgressTargetValue: undefined,
+                  trophyRewardImageUrl: undefined,
+                  trophyRewardName: undefined,
+                },
+              ],
+      }),
+    );
+
+    const { RealPsnSummaryService } = await import("./psn-summary-service.js");
+    const service = new RealPsnSummaryService(
+      createCredentialStore() as unknown as PsnCredentialStore,
+    );
+
+    const first = await service.getUnearnedTrophies();
+    const second = await service.getUnearnedTrophies();
+
+    expect(first.trophies).toEqual([
+      expect.objectContaining({
+        npCommunicationId: "NPWR1",
+        trophyId: 1,
+        trophyEarnedRate: 11.1,
+        trophyRare: 1,
+        titleName: "Bluey",
+        titleIconUrl: "https://example.com/bluey.png",
+        titleLastUpdated: "2026-03-17T00:00:00Z",
+      }),
+      expect.objectContaining({
+        npCommunicationId: "NPWR2",
+        trophyId: 3,
+        hidden: true,
+        trophyEarnedRate: 22.2,
+        titleName: "Astro Bot",
+      }),
+    ]);
+    expect(second.meta.cached).toBe(true);
+    expect(mockGetTitleTrophies).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps aggregate results partial when a title fetch fails", async () => {
+    mockGetUserTrophyProfileSummary.mockResolvedValue({
+      accountId: "123",
+      trophyLevel: "500",
+      progress: 44,
+      tier: 6,
+      earnedTrophies: {
+        bronze: 100,
+        silver: 50,
+        gold: 10,
+        platinum: 5,
+      },
+    });
+    mockGetProfileFromAccountId.mockResolvedValue({
+      onlineId: "mattr",
+      aboutMe: "",
+      avatars: [{ size: "m", url: "https://example.com/avatar.png" }],
+      languages: ["en"],
+      isPlus: true,
+      isOfficiallyVerified: false,
+      isMe: true,
+    });
+    mockGetUserTitles.mockResolvedValue({
+      trophyTitles: [
+        {
+          npServiceName: "trophy2",
+          npCommunicationId: "NPWR1",
+          trophySetVersion: "01.00",
+          trophyTitleName: "Bluey",
+          trophyTitleIconUrl: "https://example.com/bluey.png",
+          trophyTitlePlatform: "PS5",
+          hasTrophyGroups: false,
+          definedTrophies: { bronze: 1, silver: 0, gold: 0, platinum: 0 },
+          progress: 0,
+          earnedTrophies: { bronze: 0, silver: 0, gold: 0, platinum: 0 },
+          hiddenFlag: false,
+          lastUpdatedDateTime: "2026-03-17T00:00:00Z",
+        },
+        {
+          npServiceName: "trophy2",
+          npCommunicationId: "NPWR2",
+          trophySetVersion: "01.00",
+          trophyTitleName: "Astro Bot",
+          trophyTitleIconUrl: "https://example.com/astro.png",
+          trophyTitlePlatform: "PS5",
+          hasTrophyGroups: false,
+          definedTrophies: { bronze: 1, silver: 0, gold: 0, platinum: 0 },
+          progress: 0,
+          earnedTrophies: { bronze: 0, silver: 0, gold: 0, platinum: 0 },
+          hiddenFlag: false,
+          lastUpdatedDateTime: "2026-03-16T00:00:00Z",
+        },
+      ],
+      totalItemCount: 2,
+    });
+    mockGetTitleTrophies.mockImplementation(async (_authorization, npCommunicationId: string) => {
+      if (npCommunicationId === "NPWR2") {
+        throw new Error("title lookup failed");
+      }
+
+      return {
+        trophies: [
+          {
+            trophyId: 1,
+            trophyHidden: false,
+            trophyType: "bronze",
+            trophyName: "First Step",
+            trophyDetail: "Start the game.",
+            trophyIconUrl: "https://example.com/start.png",
+            trophyGroupId: "default",
+          },
+        ],
+      };
+    });
+    mockGetUserTrophiesEarnedForTitle.mockResolvedValue({
+      trophySetVersion: "01.00",
+      hasTrophyGroups: false,
+      lastUpdatedDateTime: "2026-03-17T00:00:00Z",
+      totalItemCount: 1,
+      trophies: [
+        {
+          trophyId: 1,
+          trophyHidden: false,
+          earned: false,
+          trophyType: "bronze",
+          trophyRare: 3,
+          trophyEarnedRate: "81.2",
+          trophyProgressTargetValue: undefined,
+          trophyRewardImageUrl: undefined,
+          trophyRewardName: undefined,
+        },
+      ],
+    });
+
+    const { RealPsnSummaryService } = await import("./psn-summary-service.js");
+    const service = new RealPsnSummaryService(
+      createCredentialStore() as unknown as PsnCredentialStore,
+    );
+
+    const response = await service.getUnearnedTrophies();
+
+    expect(response.trophies).toHaveLength(1);
+    expect(response.meta.partial).toBe(true);
+    expect(response.meta.warnings[0]).toContain("Astro Bot");
+  });
 });

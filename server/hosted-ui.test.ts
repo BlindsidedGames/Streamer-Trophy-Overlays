@@ -14,6 +14,7 @@ import {
   type TitleSearchResponse,
   type TitleTrophiesResponse,
   type TrophySummaryResponse,
+  type UnearnedTrophiesResponse,
 } from "../shared/contracts.js";
 import { createApp } from "./app.js";
 import { attachHostedUi, resolveHostedUiPaths } from "./hosted-ui.js";
@@ -46,6 +47,16 @@ const createPsnTokenStatusResponse = (
   updatedAt: configured ? "2026-03-17T00:00:00Z" : null,
 });
 
+const createUnearnedTrophiesResponse = (): UnearnedTrophiesResponse => ({
+  trophies: [],
+  meta: {
+    fetchedAt: "2026-03-17T00:00:00Z",
+    cached: false,
+    warnings: [],
+    partial: false,
+  },
+});
+
 const createServiceStub = () => ({
   getHealth: (): HealthResponse => ({
     status: "ok",
@@ -68,6 +79,8 @@ const createServiceStub = () => ({
   }),
   searchTitles: async (): Promise<TitleSearchResponse> => createTitleSearchResponse(),
   getTitleTrophies: async (): Promise<TitleTrophiesResponse> => createTitleTrophiesResponse(),
+  getUnearnedTrophies: async (): Promise<UnearnedTrophiesResponse> =>
+    createUnearnedTrophiesResponse(),
   getSettings: () => createDefaultOverlaySettings(),
   updateSettings: (settings: ReturnType<typeof createDefaultOverlaySettings>) => settings,
   getActiveGame: () => createDefaultActiveGameSelection(),

@@ -7,6 +7,7 @@ import type {
   TargetTrophySelection,
   TitleSearchResponse,
   TitleTrophiesResponse,
+  UnearnedTrophiesResponse,
   TrophySummaryResponse,
   UpdatePsnTokenRequest,
   UpdateTargetTrophyRequest,
@@ -48,6 +49,8 @@ export const api = {
     ),
   getTitleTrophies: (npCommunicationId: string) =>
     requestJson<TitleTrophiesResponse>(`/api/trophies/title/${npCommunicationId}`),
+  getUnearnedTrophies: () =>
+    requestJson<UnearnedTrophiesResponse>("/api/trophies/unearned"),
   saveTargetTrophy: (target: UpdateTargetTrophyRequest) =>
     requestJson<TargetTrophySelection | null>("/api/target-trophy", {
       method: "PUT",

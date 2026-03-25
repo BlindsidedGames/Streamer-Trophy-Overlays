@@ -124,4 +124,10 @@ export const normalizeTrophyBrowserItem = ({
   earnedAt: earned?.earnedDateTime ?? null,
   hidden: trophy.trophyHidden,
   groupName: groupName ?? null,
+  trophyRare: typeof earned?.trophyRare === "number" ? earned.trophyRare : null,
+  trophyEarnedRate:
+    typeof earned?.trophyEarnedRate === "string" &&
+      Number.isFinite(Number(earned.trophyEarnedRate))
+      ? Number(earned.trophyEarnedRate)
+      : null,
 });

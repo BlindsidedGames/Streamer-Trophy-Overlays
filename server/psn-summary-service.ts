@@ -5,6 +5,8 @@ import type {
   ProfileSummary,
   PsnTokenStatusResponse,
   RecentTitleSummary,
+  UnearnedTrophiesResponse,
+  UnearnedTrophyItem,
   TitleSearchResponse,
   TitleTrophiesResponse,
   TrophyBrowserItem,
@@ -52,6 +54,15 @@ type CachedTitleTrophiesState = {
   fetchedAtMs: number;
 };
 
+export type UnearnedTrophiesData = Omit<UnearnedTrophiesResponse, "error" | "trophies"> & {
+  trophies: Array<Omit<UnearnedTrophyItem, "target">>;
+};
+
+type CachedUnearnedTrophiesState = {
+  response: UnearnedTrophiesData;
+  fetchedAtMs: number;
+};
+
 const AUTH_SAFETY_WINDOW_MS = 60_000;
 const SUMMARY_CACHE_TTL_MS = 10_000;
 const SUMMARY_MAX_STALE_MS = 5 * 60_000;
@@ -59,6 +70,7 @@ const RECENT_TITLES_LIMIT = 24;
 const PAGE_LIMIT = 800;
 const DEFAULT_SEARCH_LIMIT = 12;
 const MAX_SEARCH_LIMIT = 24;
+const UNEARNED_FETCH_CONCURRENCY = 6;
 
 const hasApiError = (value: unknown): value is { error: { message?: string } } =>
   typeof value === "object" && value !== null && "error" in value;
@@ -71,6 +83,7 @@ export interface PsnSummaryService {
   getSummary(): Promise<TrophySummaryResponse>;
   getTitleByNpCommunicationId(npCommunicationId: string): Promise<RecentTitleSummary | null>;
   getTitleTrophies(npCommunicationId: string): Promise<TitleTrophiesData>;
+  getUnearnedTrophies(): Promise<UnearnedTrophiesData>;
   searchTitles(
     query: string,
     offset?: number | null,
@@ -83,9 +96,11 @@ export class RealPsnSummaryService implements PsnSummaryService {
   private cachedSummaryState: CachedSummaryState | null = null;
   private cachedTitleLibraryState: CachedTitleLibraryState | null = null;
   private readonly cachedTitleTrophiesState = new Map<string, CachedTitleTrophiesState>();
+  private cachedUnearnedTrophiesState: CachedUnearnedTrophiesState | null = null;
   private authPromise: Promise<CachedAuthState> | null = null;
   private summaryRefreshPromise: Promise<CachedSummaryState> | null = null;
   private titleLibraryRefreshPromise: Promise<CachedTitleLibraryState> | null = null;
+  private unearnedTrophiesRefreshPromise: Promise<CachedUnearnedTrophiesState> | null = null;
   private readonly titleTrophiesRefreshPromises = new Map<
     string,
     Promise<CachedTitleTrophiesState>
@@ -155,6 +170,14 @@ export class RealPsnSummaryService implements PsnSummaryService {
       return this.cloneTitle(cachedRecent);
     }
 
+    const cachedLibraryMatch = this.cachedTitleLibraryState?.titles.find(
+      (title) => title.npCommunicationId === npCommunicationId,
+    );
+
+    if (cachedLibraryMatch) {
+      return this.cloneTitle(cachedLibraryMatch);
+    }
+
     const summary = await this.getSummary();
     const summaryMatch = summary.titles.find(
       (title) => title.npCommunicationId === npCommunicationId,
@@ -190,6 +213,30 @@ export class RealPsnSummaryService implements PsnSummaryService {
     } catch (error) {
       if (cached && !this.isCacheExpired(cached)) {
         return this.cloneTitleTrophiesData(cached.response, true);
+      }
+
+      throw error;
+    }
+  }
+
+  async getUnearnedTrophies(): Promise<UnearnedTrophiesData> {
+    const cached = this.cachedUnearnedTrophiesState;
+
+    if (cached && !this.isCacheStale(cached)) {
+      return this.cloneUnearnedTrophiesData(cached.response, true);
+    }
+
+    if (cached && !this.isCacheExpired(cached)) {
+      void this.refreshUnearnedTrophiesInBackground();
+      return this.cloneUnearnedTrophiesData(cached.response, true);
+    }
+
+    try {
+      const nextState = await this.refreshUnearnedTrophiesState();
+      return this.cloneUnearnedTrophiesData(nextState.response, false);
+    } catch (error) {
+      if (cached && !this.isCacheExpired(cached)) {
+        return this.cloneUnearnedTrophiesData(cached.response, true);
       }
 
       throw error;
@@ -238,9 +285,11 @@ export class RealPsnSummaryService implements PsnSummaryService {
     this.cachedSummaryState = null;
     this.cachedTitleLibraryState = null;
     this.cachedTitleTrophiesState.clear();
+    this.cachedUnearnedTrophiesState = null;
     this.authPromise = null;
     this.summaryRefreshPromise = null;
     this.titleLibraryRefreshPromise = null;
+    this.unearnedTrophiesRefreshPromise = null;
     this.titleTrophiesRefreshPromises.clear();
   }
 
@@ -505,6 +554,55 @@ export class RealPsnSummaryService implements PsnSummaryService {
     return nextPromise.catch(() => null);
   }
 
+  private async refreshUnearnedTrophiesState(): Promise<CachedUnearnedTrophiesState> {
+    const generation = this.cacheGeneration;
+    let refreshPromise = this.unearnedTrophiesRefreshPromise;
+
+    if (!refreshPromise) {
+      const nextPromise = this.fetchUnearnedTrophiesState().finally(() => {
+        if (this.unearnedTrophiesRefreshPromise === nextPromise) {
+          this.unearnedTrophiesRefreshPromise = null;
+        }
+      });
+
+      this.unearnedTrophiesRefreshPromise = nextPromise;
+      refreshPromise = nextPromise;
+    }
+
+    const nextState = await refreshPromise;
+
+    if (generation !== this.cacheGeneration) {
+      return this.refreshUnearnedTrophiesState();
+    }
+
+    this.cachedUnearnedTrophiesState = nextState;
+    return nextState;
+  }
+
+  private refreshUnearnedTrophiesInBackground() {
+    if (this.unearnedTrophiesRefreshPromise) {
+      return this.unearnedTrophiesRefreshPromise.catch(() => null);
+    }
+
+    const generation = this.cacheGeneration;
+    const nextPromise = this.fetchUnearnedTrophiesState()
+      .then((nextState) => {
+        if (generation === this.cacheGeneration) {
+          this.cachedUnearnedTrophiesState = nextState;
+        }
+
+        return nextState;
+      })
+      .finally(() => {
+        if (this.unearnedTrophiesRefreshPromise === nextPromise) {
+          this.unearnedTrophiesRefreshPromise = null;
+        }
+      });
+
+    this.unearnedTrophiesRefreshPromise = nextPromise;
+    return nextPromise.catch(() => null);
+  }
+
   private async fetchSummaryState(): Promise<CachedSummaryState> {
     const warnings: string[] = [];
     const authorization = (await this.ensureAuthState()).tokens;
@@ -590,6 +688,77 @@ export class RealPsnSummaryService implements PsnSummaryService {
         titles,
         this.cachedTitleLibraryState?.titles ?? this.cachedSummaryState?.summary.titles ?? [],
       ),
+      fetchedAtMs: Date.now(),
+    };
+  }
+
+  private async fetchUnearnedTrophiesState(): Promise<CachedUnearnedTrophiesState> {
+    const titles = await this.getTitleLibrary();
+    const warnings: string[] = [];
+    const aggregatedTrophies: Array<Omit<UnearnedTrophyItem, "target">> = [];
+
+    const titleResponses = await this.mapWithConcurrency(
+      titles,
+      UNEARNED_FETCH_CONCURRENCY,
+      async (title) => {
+        try {
+          const response = await this.getTitleTrophies(title.npCommunicationId);
+          return { title, response, error: null as Error | null };
+        } catch (error) {
+          return {
+            title,
+            response: null as TitleTrophiesData | null,
+            error: error instanceof Error ? error : new Error("Unexpected error."),
+          };
+        }
+      },
+    );
+
+    titleResponses.forEach(({ title, response, error }) => {
+      if (error || !response) {
+        warnings.push(`Unable to load ${title.titleName}: ${error?.message ?? "Unexpected error."}`);
+        return;
+      }
+
+      warnings.push(...response.meta.warnings.map((warning) => `${title.titleName}: ${warning}`));
+
+      response.trophies.forEach((trophy) => {
+        if (trophy.earned) {
+          return;
+        }
+
+        aggregatedTrophies.push({
+          npCommunicationId: trophy.npCommunicationId,
+          trophyId: trophy.trophyId,
+          trophyGroupId: trophy.trophyGroupId,
+          name: trophy.name,
+          description: trophy.description,
+          iconUrl: trophy.iconUrl,
+          grade: trophy.grade,
+          earned: false,
+          earnedAt: null,
+          hidden: trophy.hidden,
+          groupName: trophy.groupName,
+          trophyRare: trophy.trophyRare ?? null,
+          trophyEarnedRate: trophy.trophyEarnedRate ?? null,
+          titleName: title.titleName,
+          titleIconUrl: title.iconUrl,
+          platform: title.platform,
+          titleLastUpdated: title.lastUpdated,
+        });
+      });
+    });
+
+    return {
+      response: {
+        trophies: aggregatedTrophies,
+        meta: {
+          fetchedAt: new Date().toISOString(),
+          cached: false,
+          warnings,
+          partial: warnings.length > 0,
+        },
+      },
       fetchedAtMs: Date.now(),
     };
   }
@@ -759,6 +928,46 @@ export class RealPsnSummaryService implements PsnSummaryService {
         cached,
       },
     };
+  }
+
+  private cloneUnearnedTrophiesData(
+    response: UnearnedTrophiesData,
+    cached: boolean,
+  ): UnearnedTrophiesData {
+    return {
+      trophies: response.trophies.map((trophy) => ({ ...trophy })),
+      meta: {
+        ...response.meta,
+        warnings: [...response.meta.warnings],
+        cached,
+      },
+    };
+  }
+
+  private async mapWithConcurrency<TItem, TResult>(
+    items: TItem[],
+    concurrency: number,
+    worker: (item: TItem, index: number) => Promise<TResult>,
+  ): Promise<TResult[]> {
+    const results = new Array<TResult>(items.length);
+    let cursor = 0;
+
+    const next = async (): Promise<void> => {
+      const currentIndex = cursor;
+      cursor += 1;
+
+      if (currentIndex >= items.length) {
+        return;
+      }
+
+      results[currentIndex] = await worker(items[currentIndex] as TItem, currentIndex);
+      await next();
+    };
+
+    const workerCount = Math.min(Math.max(concurrency, 1), items.length);
+    await Promise.all(Array.from({ length: workerCount }, () => next()));
+
+    return results;
   }
 
   private mergeProfileIdentity(

@@ -22,6 +22,8 @@ import type {
   TitleTrophiesResponse,
   TrophyBrowserItem,
   TrophySummaryResponse,
+  UnearnedTrophiesResponse,
+  UnearnedTrophyItem,
   UpdateTargetTrophyRequest,
 } from "../shared/contracts.js";
 import {
@@ -40,7 +42,25 @@ import {
 
 type ConnectionState = "loading" | "ready" | "error";
 type PsnAccessIssue = "missing" | "invalid" | null;
-type WorkspaceTab = "setup" | "games" | "trophies";
+type WorkspaceTab = "setup" | "games" | "trophies" | "allUnearned";
+type TrophyBrowserSubTabKey = "all" | "earned" | `group:${string}`;
+type TrophyBrowserListMode = "earned" | "unearned";
+type UnearnedSortMode =
+  | "easiestFirst"
+  | "hardestFirst"
+  | "titleAsc"
+  | "recentlyActiveTitle";
+interface TrophyBrowserSubTab {
+  key: TrophyBrowserSubTabKey;
+  label: string;
+  metricLabel: string | null;
+  groupId: string | null;
+  listMode: TrophyBrowserListMode;
+}
+type TargetableTrophy = {
+  trophyId: number;
+  trophyGroupId: string;
+};
 type DesktopWindowControls = NonNullable<typeof window.streamerToolsDesktop>["windowControls"];
 
 const trophyBrowserGradeIcon: Record<TrophyBrowserItem["grade"], string> = {
@@ -103,12 +123,30 @@ const defaultPsnTokenStatus: PsnTokenStatusResponse = {
   updatedAt: null,
 };
 
+const defaultUnearnedTrophies: UnearnedTrophiesResponse = {
+  trophies: [],
+  meta: {
+    fetchedAt: "",
+    cached: false,
+    warnings: [],
+    partial: false,
+  },
+};
+
 const SEARCH_LIMIT = 12;
 const TOKEN_REQUIRED_MESSAGE =
   "Open PSN access to save a token before loading titles and trophies.";
 const PSN_TOKEN_URL = "https://ca.account.sony.com/api/v1/ssocookie";
 const SETTINGS_SAVE_DEBOUNCE_MS = 400;
 const ROUTE_COPY_FEEDBACK_MS = 1600;
+const DEFAULT_TROPHY_GROUP_ID = "default";
+const DEFAULT_UNEARNED_SORT_MODE: UnearnedSortMode = "easiestFirst";
+const unearnedSortOptions: Array<{ value: UnearnedSortMode; label: string }> = [
+  { value: "easiestFirst", label: "Easiest first" },
+  { value: "hardestFirst", label: "Hardest first" },
+  { value: "titleAsc", label: "Title A-Z" },
+  { value: "recentlyActiveTitle", label: "Recently active title" },
+];
 const stripZoneLabels: Record<StripZoneKey, string> = {
   artwork: "Artwork",
   identity: "Title and platform",
@@ -280,12 +318,18 @@ const resolvePsnAccessIssue = (error: unknown): PsnAccessIssue => {
 
 const toTargetRequest = (
   npCommunicationId: string,
-  trophy: TrophyBrowserItem | null,
+  trophy: TargetableTrophy | null,
 ): UpdateTargetTrophyRequest => ({
   npCommunicationId,
   trophyId: trophy?.trophyId ?? null,
   trophyGroupId: trophy?.trophyGroupId ?? null,
 });
+
+const buildTrophySelectionKey = (
+  npCommunicationId: string,
+  trophyGroupId: string,
+  trophyId: number,
+) => `${npCommunicationId}:${trophyGroupId}:${trophyId}`;
 
 const formatTimestamp = (value: string | null) => {
   if (!value) {
@@ -294,6 +338,43 @@ const formatTimestamp = (value: string | null) => {
 
   return new Date(value).toLocaleString();
 };
+
+const earnedRateFormatter = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 1,
+});
+
+const formatEarnedRate = (value: number | null) =>
+  value == null ? "Rate unavailable" : `${earnedRateFormatter.format(value)}%`;
+
+const formatTitleLastUpdated = (value: string | null) =>
+  value ? new Date(value).toLocaleDateString() : "No recent sync";
+
+const buildTrophyBrowserSubTabKey = (
+  groupId: string,
+): TrophyBrowserSubTabKey => `group:${groupId}`;
+
+const sanitizeTrophyBrowserSubTabKey = (key: TrophyBrowserSubTabKey) =>
+  key.replace(/[^a-z0-9-]+/gi, "-");
+
+const resolveTrophyBrowserGroupLabel = (
+  groupId: string,
+  groupName: string | null,
+) => {
+  if (groupId === DEFAULT_TROPHY_GROUP_ID) {
+    return "Main Game";
+  }
+
+  return groupName?.trim() ? groupName : `DLC ${groupId}`;
+};
+
+const formatTrophyBrowserMetric = (earnedCount: number, totalCount: number) =>
+  `${Math.round(totalCount <= 0 ? 0 : (earnedCount / totalCount) * 100)}%`;
+
+const filterTrophiesByGroup = (
+  trophies: TrophyBrowserItem[],
+  groupId: string | null,
+) => (groupId == null ? trophies : trophies.filter((trophy) => trophy.trophyGroupId === groupId));
 
 const moveStripZoneToIndex = (
   order: StripZoneKey[],
@@ -420,6 +501,16 @@ function DashboardApp() {
   const [titleSearchLoading, setTitleSearchLoading] = useState(false);
   const [titleSearchError, setTitleSearchError] = useState<string | null>(null);
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("setup");
+  const [trophyBrowserSubTab, setTrophyBrowserSubTab] =
+    useState<TrophyBrowserSubTabKey>("all");
+  const [unearnedTrophies, setUnearnedTrophies] =
+    useState<UnearnedTrophiesResponse>(defaultUnearnedTrophies);
+  const [unearnedTrophiesLoading, setUnearnedTrophiesLoading] = useState(false);
+  const [unearnedTrophiesError, setUnearnedTrophiesError] = useState<string | null>(null);
+  const [hasAttemptedUnearnedTrophiesLoad, setHasAttemptedUnearnedTrophiesLoad] =
+    useState(false);
+  const [unearnedSortMode, setUnearnedSortMode] =
+    useState<UnearnedSortMode>(DEFAULT_UNEARNED_SORT_MODE);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
   const [psnAccessOpen, setPsnAccessOpen] = useState(false);
@@ -521,6 +612,29 @@ function DashboardApp() {
       }
     } finally {
       setTitleTrophiesLoading(false);
+    }
+  };
+
+  const loadUnearnedTrophies = async () => {
+    setUnearnedTrophiesLoading(true);
+    setUnearnedTrophiesError(null);
+    setHasAttemptedUnearnedTrophiesLoad(true);
+
+    try {
+      const nextUnearnedTrophies = await api.getUnearnedTrophies();
+      setUnearnedTrophies(nextUnearnedTrophies);
+    } catch (error) {
+      const nextPsnAccessIssue = resolvePsnAccessIssue(error);
+      setUnearnedTrophiesError(
+        extractErrorMessage(error, "Unable to load unearned trophies."),
+      );
+      setPsnAccessIssue(nextPsnAccessIssue);
+      if (nextPsnAccessIssue) {
+        setPsnAccessOpen(true);
+      }
+      setDebugPayload(error);
+    } finally {
+      setUnearnedTrophiesLoading(false);
     }
   };
 
@@ -764,9 +878,100 @@ function DashboardApp() {
   }, [activeGame.mode, selectedPsnTitle, visibleTitleList]);
   const trophyBrowserAvailable =
     activeGame.mode === "psn" && selectedPsnTitleId != null;
+  const unearnedTrophyCount = unearnedTrophies.trophies.length;
+
+  const trophyBrowserTabs = useMemo(() => {
+    if (titleTrophies.trophies.length === 0) {
+      return [] satisfies TrophyBrowserSubTab[];
+    }
+
+    const tabs: TrophyBrowserSubTab[] = [
+      {
+        key: "all",
+        label: "All",
+        metricLabel: formatTrophyBrowserMetric(
+          titleTrophies.trophies.filter((trophy) => trophy.earned).length,
+          titleTrophies.trophies.length,
+        ),
+        groupId: null,
+        listMode: "unearned",
+      },
+      {
+        key: buildTrophyBrowserSubTabKey(DEFAULT_TROPHY_GROUP_ID),
+        label: "Main Game",
+        metricLabel: formatTrophyBrowserMetric(
+          titleTrophies.trophies.filter(
+            (trophy) => trophy.trophyGroupId === DEFAULT_TROPHY_GROUP_ID && trophy.earned,
+          ).length,
+          titleTrophies.trophies.filter(
+            (trophy) => trophy.trophyGroupId === DEFAULT_TROPHY_GROUP_ID,
+          ).length,
+        ),
+        groupId: DEFAULT_TROPHY_GROUP_ID,
+        listMode: "unearned",
+      },
+    ];
+
+    const dlcGroups = Array.from(
+      titleTrophies.trophies.reduce(
+        (groups, trophy) => {
+          if (trophy.trophyGroupId === DEFAULT_TROPHY_GROUP_ID) {
+            return groups;
+          }
+
+          const existingGroup = groups.get(trophy.trophyGroupId);
+          if (!existingGroup || (!existingGroup.groupName && trophy.groupName)) {
+            groups.set(trophy.trophyGroupId, {
+              groupId: trophy.trophyGroupId,
+              groupName: trophy.groupName,
+            });
+          }
+
+          return groups;
+        },
+        new Map<string, { groupId: string; groupName: string | null }>(),
+      ).values(),
+    ).sort((left, right) => left.groupId.localeCompare(right.groupId));
+
+    dlcGroups.forEach((group) => {
+      const groupTrophies = filterTrophiesByGroup(titleTrophies.trophies, group.groupId);
+      tabs.push({
+        key: buildTrophyBrowserSubTabKey(group.groupId),
+        label: resolveTrophyBrowserGroupLabel(group.groupId, group.groupName),
+        metricLabel: formatTrophyBrowserMetric(
+          groupTrophies.filter((trophy) => trophy.earned).length,
+          groupTrophies.length,
+        ),
+        groupId: group.groupId,
+        listMode: "unearned",
+      });
+    });
+
+    tabs.push({
+      key: "earned",
+      label: "Earned",
+      metricLabel: null,
+      groupId: null,
+      listMode: "earned",
+    });
+
+    return tabs;
+  }, [titleTrophies.trophies]);
+
+  const activeTrophyBrowserTab =
+    trophyBrowserTabs.find((tab) => tab.key === trophyBrowserSubTab) ??
+    trophyBrowserTabs[0] ??
+    null;
 
   const currentTargetSelectionKey = titleTrophies.target
-    ? `${titleTrophies.target.trophyGroupId}:${titleTrophies.target.trophyId}`
+    ? buildTrophySelectionKey(
+        titleTrophies.target.npCommunicationId,
+        titleTrophies.target.trophyGroupId,
+        titleTrophies.target.trophyId,
+      )
+    : null;
+  const currentTargetClearPendingKey = titleTrophies.target
+    ? `clear:${titleTrophies.target.npCommunicationId}`
     : null;
   const currentTargetTrophy = useMemo(
     () =>
@@ -779,22 +984,155 @@ function DashboardApp() {
         : null,
     [titleTrophies.target, titleTrophies.trophies],
   );
+  const trophyBrowserQualifiedEntries = useMemo(() => {
+    if (!activeTrophyBrowserTab) {
+      return [];
+    }
+
+    const scopedTrophies = filterTrophiesByGroup(
+      titleTrophies.trophies,
+      activeTrophyBrowserTab.groupId,
+    );
+
+    return activeTrophyBrowserTab.listMode === "earned"
+      ? scopedTrophies.filter((trophy) => trophy.earned)
+      : scopedTrophies.filter((trophy) => !trophy.earned);
+  }, [activeTrophyBrowserTab, titleTrophies.trophies]);
   const trophyBrowserEntries = useMemo(
     () =>
-      titleTrophies.trophies.filter((trophy) => {
-        const trophyKey = `${trophy.trophyGroupId}:${trophy.trophyId}`;
+      trophyBrowserQualifiedEntries.filter((trophy) => {
+        const trophyKey = buildTrophySelectionKey(
+          trophy.npCommunicationId,
+          trophy.trophyGroupId,
+          trophy.trophyId,
+        );
         return trophyKey !== currentTargetSelectionKey;
       }),
-    [currentTargetSelectionKey, titleTrophies.trophies],
+    [currentTargetSelectionKey, trophyBrowserQualifiedEntries],
   );
-  const unearnedTrophies = useMemo(
-    () => trophyBrowserEntries.filter((trophy) => !trophy.earned),
-    [trophyBrowserEntries],
-  );
-  const earnedTrophies = useMemo(
-    () => trophyBrowserEntries.filter((trophy) => trophy.earned),
-    [trophyBrowserEntries],
-  );
+  const sortedUnearnedTrophies = useMemo(() => {
+    const rows = [...unearnedTrophies.trophies];
+
+    const compareRateAscending = (left: number | null, right: number | null) => {
+      if (left == null && right == null) {
+        return 0;
+      }
+
+      if (left == null) {
+        return 1;
+      }
+
+      if (right == null) {
+        return -1;
+      }
+
+      return left - right;
+    };
+
+    const compareRateDescending = (left: number | null, right: number | null) =>
+      left == null && right == null
+        ? 0
+        : left == null
+          ? 1
+          : right == null
+            ? -1
+            : right - left;
+
+    rows.sort((left, right) => {
+      if (unearnedSortMode === "easiestFirst") {
+        const rateComparison = compareRateDescending(
+          left.trophyEarnedRate,
+          right.trophyEarnedRate,
+        );
+
+        if (rateComparison !== 0) {
+          return rateComparison;
+        }
+      }
+
+      if (unearnedSortMode === "hardestFirst") {
+        const rateComparison = compareRateAscending(
+          left.trophyEarnedRate,
+          right.trophyEarnedRate,
+        );
+
+        if (rateComparison !== 0) {
+          return rateComparison;
+        }
+      }
+
+      if (unearnedSortMode === "titleAsc") {
+        const titleComparison = left.titleName.localeCompare(right.titleName);
+
+        if (titleComparison !== 0) {
+          return titleComparison;
+        }
+
+        const rateComparison = compareRateDescending(
+          left.trophyEarnedRate,
+          right.trophyEarnedRate,
+        );
+
+        if (rateComparison !== 0) {
+          return rateComparison;
+        }
+      }
+
+      if (unearnedSortMode === "recentlyActiveTitle") {
+        const leftUpdatedAt = left.titleLastUpdated ? Date.parse(left.titleLastUpdated) : null;
+        const rightUpdatedAt = right.titleLastUpdated ? Date.parse(right.titleLastUpdated) : null;
+
+        if (leftUpdatedAt == null && rightUpdatedAt != null) {
+          return 1;
+        }
+
+        if (leftUpdatedAt != null && rightUpdatedAt == null) {
+          return -1;
+        }
+
+        if (
+          leftUpdatedAt != null &&
+          rightUpdatedAt != null &&
+          leftUpdatedAt !== rightUpdatedAt
+        ) {
+          return rightUpdatedAt - leftUpdatedAt;
+        }
+
+        const rateComparison = compareRateDescending(
+          left.trophyEarnedRate,
+          right.trophyEarnedRate,
+        );
+
+        if (rateComparison !== 0) {
+          return rateComparison;
+        }
+      }
+
+      const titleComparison = left.titleName.localeCompare(right.titleName);
+
+      if (titleComparison !== 0) {
+        return titleComparison;
+      }
+
+      const trophyNameComparison = (left.name ?? "").localeCompare(right.name ?? "");
+
+      if (trophyNameComparison !== 0) {
+        return trophyNameComparison;
+      }
+
+      return left.trophyId - right.trophyId;
+    });
+
+    return rows;
+  }, [unearnedSortMode, unearnedTrophies.trophies]);
+  const trophyBrowserSectionCaption =
+    activeTrophyBrowserTab?.listMode === "earned"
+      ? `Earned trophies ${trophyBrowserQualifiedEntries.length}`
+      : `Unearned trophies ${trophyBrowserQualifiedEntries.length}`;
+  const trophyBrowserEmptyMessage =
+    activeTrophyBrowserTab?.listMode === "earned"
+      ? "No earned trophies in this title yet."
+      : "No unearned trophies in this tab.";
   const psnTokenStatusLabel = psnTokenStatus.configured ? "Saved locally" : "No token saved";
   const psnTokenUpdatedLabel = useMemo(
     () => formatTimestamp(psnTokenStatus.updatedAt),
@@ -805,10 +1143,48 @@ function DashboardApp() {
   };
 
   useEffect(() => {
-    if (workspaceTab === "trophies" && !trophyBrowserAvailable) {
+    if (
+      (workspaceTab === "trophies" || workspaceTab === "allUnearned") &&
+      !trophyBrowserAvailable
+    ) {
       setWorkspaceTab("games");
     }
   }, [trophyBrowserAvailable, workspaceTab]);
+
+  useEffect(() => {
+    if (
+      workspaceTab === "allUnearned" &&
+      trophyBrowserAvailable &&
+      !hasAttemptedUnearnedTrophiesLoad &&
+      !unearnedTrophiesLoading
+    ) {
+      void loadUnearnedTrophies();
+    }
+  }, [
+    hasAttemptedUnearnedTrophiesLoad,
+    trophyBrowserAvailable,
+    unearnedTrophiesLoading,
+    workspaceTab,
+  ]);
+
+  useEffect(() => {
+    setTrophyBrowserSubTab("all");
+  }, [selectedPsnTitleId]);
+
+  useEffect(() => {
+    if (!trophyBrowserAvailable || titleTrophiesLoading || trophyBrowserTabs.length === 0) {
+      return;
+    }
+
+    if (!trophyBrowserTabs.some((tab) => tab.key === trophyBrowserSubTab)) {
+      setTrophyBrowserSubTab("all");
+    }
+  }, [
+    titleTrophiesLoading,
+    trophyBrowserAvailable,
+    trophyBrowserSubTab,
+    trophyBrowserTabs,
+  ]);
 
   const clearPendingSettingsSave = () => {
     if (pendingSettingsSaveTimeoutRef.current != null) {
@@ -997,45 +1373,75 @@ function DashboardApp() {
     }
   };
 
-  const updateTargetTrophy = async (trophy: TrophyBrowserItem | null) => {
-    if (!selectedPsnTitleId) {
+  const updateTargetTrophyForTitle = async (
+    npCommunicationId: string | null,
+    trophy: TargetableTrophy | null,
+  ) => {
+    if (!npCommunicationId) {
       return;
     }
 
-    const previousTarget = titleTrophies.target;
-    const request = toTargetRequest(selectedPsnTitleId, trophy);
+    const previousTarget = npCommunicationId === selectedPsnTitleId
+      ? titleTrophies.target
+      : null;
+    const previousUnearnedTrophies = unearnedTrophies;
+    const request = toTargetRequest(npCommunicationId, trophy);
     const nextTargetKey =
-      trophy == null ? "clear" : `${trophy.trophyGroupId}:${trophy.trophyId}`;
+      trophy == null
+        ? `clear:${npCommunicationId}`
+        : buildTrophySelectionKey(npCommunicationId, trophy.trophyGroupId, trophy.trophyId);
 
     setTargetPendingKey(nextTargetKey);
-    setTitleTrophies((current) => ({
+    if (npCommunicationId === selectedPsnTitleId) {
+      setTitleTrophies((current) => ({
+        ...current,
+        target:
+          trophy == null
+            ? null
+            : {
+                npCommunicationId,
+                trophyId: trophy.trophyId,
+                trophyGroupId: trophy.trophyGroupId,
+                updatedAt: new Date().toISOString(),
+              },
+      }));
+    }
+    setUnearnedTrophies((current) => ({
       ...current,
-      target:
-        trophy == null
-          ? null
-          : {
-              npCommunicationId: selectedPsnTitleId,
-              trophyId: trophy.trophyId,
-              trophyGroupId: trophy.trophyGroupId,
-              updatedAt: new Date().toISOString(),
-            },
+      trophies: current.trophies.map((entry) => ({
+        ...entry,
+        target:
+          entry.npCommunicationId === npCommunicationId &&
+          trophy != null &&
+          entry.trophyId === trophy.trophyId &&
+          entry.trophyGroupId === trophy.trophyGroupId,
+      })),
     }));
     setStatusMessage(trophy ? "Updating current trophy" : "Clearing current trophy");
 
     try {
       await api.saveTargetTrophy(request);
+      const nextOverlayDataPromise = api.getOverlayData();
+      const nextTitleTrophiesPromise = npCommunicationId === selectedPsnTitleId
+        ? api.getTitleTrophies(npCommunicationId)
+        : Promise.resolve(null);
       const [nextOverlayData, nextTitleTrophies] = await Promise.all([
-        api.getOverlayData(),
-        api.getTitleTrophies(selectedPsnTitleId),
+        nextOverlayDataPromise,
+        nextTitleTrophiesPromise,
       ]);
       setOverlayData(nextOverlayData);
-      setTitleTrophies(nextTitleTrophies);
+      if (nextTitleTrophies) {
+        setTitleTrophies(nextTitleTrophies);
+      }
       setStatusMessage(trophy ? "Current trophy updated" : "Current trophy cleared");
     } catch (error) {
-      setTitleTrophies((current) => ({
-        ...current,
-        target: previousTarget,
-      }));
+      if (npCommunicationId === selectedPsnTitleId) {
+        setTitleTrophies((current) => ({
+          ...current,
+          target: previousTarget,
+        }));
+      }
+      setUnearnedTrophies(previousUnearnedTrophies);
       const nextPsnAccessIssue = resolvePsnAccessIssue(error);
       setPsnAccessIssue(nextPsnAccessIssue);
       if (nextPsnAccessIssue) {
@@ -1205,11 +1611,13 @@ function DashboardApp() {
           trophyBrowserAvailable={trophyBrowserAvailable}
           workspaceTab={workspaceTab}
           currentTargetSelectionKey={currentTargetSelectionKey}
+          currentTargetClearPendingKey={currentTargetClearPendingKey}
           targetPendingKey={targetPendingKey}
           onSelectSetup={() => setWorkspaceTab("setup")}
           onSelectGames={() => setWorkspaceTab("games")}
           onSelectTrophies={() => setWorkspaceTab("trophies")}
-          onClearTarget={() => void updateTargetTrophy(null)}
+          onSelectAllUnearned={() => setWorkspaceTab("allUnearned")}
+          onClearTarget={() => void updateTargetTrophyForTitle(selectedPsnTitleId, null)}
           onOpenPsnAccess={() => setPsnAccessOpen(true)}
           onRefresh={() => void load()}
         />
@@ -1730,80 +2138,296 @@ function DashboardApp() {
 
         {workspaceTab === "trophies" && trophyBrowserAvailable ? (
           <section
-            className="workspace-panel"
+            className="workspace-panel trophy-browser-workspace"
             id="workspace-panel-trophies"
             role="tabpanel"
             aria-labelledby="workspace-tab-trophies"
           >
-            <div className="trophy-browser-surface">
-              {activeGame.mode === "custom" ? (
+            {activeGame.mode === "custom" ? (
+              <div className="trophy-browser-surface">
                 <p className="panel-empty">
                   Switch back to a PSN title to browse and target trophies.
                 </p>
-              ) : titleTrophiesLoading ? (
+              </div>
+            ) : titleTrophiesLoading ? (
+              <div className="trophy-browser-surface">
                 <p className="panel-empty">Loading trophies…</p>
-              ) : titleTrophiesError ? (
+              </div>
+            ) : titleTrophiesError ? (
+              <div className="trophy-browser-surface">
                 <p className="panel-error">{titleTrophiesError}</p>
-              ) : titleTrophies.trophies.length === 0 ? (
+              </div>
+            ) : titleTrophies.trophies.length === 0 ? (
+              <div className="trophy-browser-surface">
                 <p className="panel-empty">
                   No trophies are available for the selected title.
                 </p>
-              ) : (
+              </div>
+            ) : (
+              <>
+                {currentTargetTrophy ? (
+                  <div className="trophy-browser-target-rail">
+                    <TrophyCard
+                      trophy={currentTargetTrophy}
+                      active
+                      featured
+                      pending={targetPendingKey === currentTargetSelectionKey}
+                      onSelect={() =>
+                        void updateTargetTrophyForTitle(
+                          currentTargetTrophy.npCommunicationId,
+                          currentTargetTrophy,
+                        )}
+                    />
+                  </div>
+                ) : null}
+
+                <div className="trophy-browser-surface">
                 <div className="trophy-browser-stack">
-                  {currentTargetTrophy ? (
-                    <div className="trophy-pinned">
-                      <p className="section-caption">Pinned target</p>
-                      <TrophyCard
-                        trophy={currentTargetTrophy}
-                        active
-                        featured
-                        pending={targetPendingKey === currentTargetSelectionKey}
-                        onSelect={() => void updateTargetTrophy(currentTargetTrophy)}
-                      />
-                    </div>
-                  ) : null}
+                  <div
+                    className="trophy-browser-tablist"
+                    role="tablist"
+                    aria-label="Trophy browser groups"
+                  >
+                    {trophyBrowserTabs.map((tab) => {
+                      const tabId = `trophy-browser-tab-${sanitizeTrophyBrowserSubTabKey(tab.key)}`;
+                      const panelId = `trophy-browser-panel-${sanitizeTrophyBrowserSubTabKey(tab.key)}`;
 
-                  {unearnedTrophies.length > 0 ? (
-                    <div className="trophy-section">
-                      <p className="section-caption">Unearned trophies</p>
-                      <div className="trophy-card-grid">
-                        {unearnedTrophies.map((trophy) => {
-                          const trophyKey = `${trophy.trophyGroupId}:${trophy.trophyId}`;
-                          return (
-                            <TrophyCard
-                              key={trophyKey}
-                              trophy={trophy}
-                              active={currentTargetSelectionKey === trophyKey}
-                              pending={targetPendingKey === trophyKey}
-                              onSelect={() => void updateTargetTrophy(trophy)}
-                            />
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ) : null}
+                      return (
+                        <button
+                          key={tab.key}
+                          id={tabId}
+                          className={`trophy-browser-tab ${
+                            activeTrophyBrowserTab?.key === tab.key ? "is-active" : ""
+                          }`}
+                          type="button"
+                          role="tab"
+                          aria-selected={activeTrophyBrowserTab?.key === tab.key}
+                          aria-controls={panelId}
+                          onClick={() => setTrophyBrowserSubTab(tab.key)}
+                        >
+                          <span className="trophy-browser-tab-label">{tab.label}</span>
+                          {tab.metricLabel ? (
+                            <span className="trophy-browser-tab-metric">{tab.metricLabel}</span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
 
-                  {earnedTrophies.length > 0 ? (
-                    <div className="trophy-section">
-                      <p className="section-caption">Earned trophies</p>
-                      <div className="trophy-card-grid">
-                        {earnedTrophies.map((trophy) => {
-                          const trophyKey = `${trophy.trophyGroupId}:${trophy.trophyId}`;
-                          return (
-                            <TrophyCard
-                              key={trophyKey}
-                              trophy={trophy}
-                              active={currentTargetSelectionKey === trophyKey}
-                              pending={targetPendingKey === trophyKey}
-                              onSelect={() => void updateTargetTrophy(trophy)}
-                            />
-                          );
-                        })}
-                      </div>
+                  {activeTrophyBrowserTab ? (
+                    <div
+                      id={`trophy-browser-panel-${sanitizeTrophyBrowserSubTabKey(
+                        activeTrophyBrowserTab.key,
+                      )}`}
+                      className="trophy-section"
+                    >
+                      <p className="section-caption">{trophyBrowserSectionCaption}</p>
+                      {trophyBrowserEntries.length > 0 ? (
+                        <div className="trophy-card-grid">
+                          {trophyBrowserEntries.map((trophy) => {
+                            const trophyKey = buildTrophySelectionKey(
+                              trophy.npCommunicationId,
+                              trophy.trophyGroupId,
+                              trophy.trophyId,
+                            );
+                            return (
+                              <TrophyCard
+                                key={trophyKey}
+                                trophy={trophy}
+                                active={currentTargetSelectionKey === trophyKey}
+                                pending={targetPendingKey === trophyKey}
+                                onSelect={() =>
+                                  void updateTargetTrophyForTitle(
+                                    trophy.npCommunicationId,
+                                    trophy,
+                                  )}
+                              />
+                            );
+                          })}
+                        </div>
+                      ) : trophyBrowserQualifiedEntries.length === 0 ? (
+                        <p className="panel-empty">{trophyBrowserEmptyMessage}</p>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
-              )}
+                </div>
+              </>
+            )}
+          </section>
+        ) : null}
+
+        {workspaceTab === "allUnearned" && trophyBrowserAvailable ? (
+          <section
+            className="workspace-panel all-unearned-workspace"
+            id="workspace-panel-all-unearned"
+            role="tabpanel"
+            aria-labelledby="workspace-tab-all-unearned"
+          >
+            <div className="workspace-subpanel all-unearned-surface">
+              <div className="all-unearned-toolbar">
+                <div className="all-unearned-toolbar-copy">
+                  <p className="section-caption">All unearned trophies {unearnedTrophyCount}</p>
+                  <p className="panel-footnote">
+                    All played titles from PSN trophy history, sorted locally without refetching.
+                  </p>
+                </div>
+
+                <div className="all-unearned-toolbar-actions">
+                  <label className="field select-field all-unearned-sort-field">
+                    <span>Sort order</span>
+                    <div className="select-field-control">
+                      <select
+                        aria-label="All unearned sort order"
+                        value={unearnedSortMode}
+                        onChange={(event) =>
+                          setUnearnedSortMode(event.target.value as UnearnedSortMode)}
+                      >
+                        {unearnedSortOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </label>
+
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    disabled={unearnedTrophiesLoading}
+                    onClick={() => void loadUnearnedTrophies()}
+                  >
+                    {unearnedTrophiesLoading ? "Refreshing…" : "Refresh unearned"}
+                  </button>
+                </div>
+              </div>
+
+              {unearnedTrophiesError ? <p className="panel-error">{unearnedTrophiesError}</p> : null}
+
+              {unearnedTrophies.meta.warnings.length > 0 ? (
+                <div className="all-unearned-warning-stack">
+                  <p className="panel-footnote">
+                    Partial data loaded. {unearnedTrophies.meta.warnings.length} titles returned
+                    warnings.
+                  </p>
+                  <div className="all-unearned-warning-list">
+                    {unearnedTrophies.meta.warnings.map((warning) => (
+                      <p className="panel-footnote" key={warning}>
+                        {warning}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {unearnedTrophiesLoading && unearnedTrophies.trophies.length === 0 ? (
+                <p className="panel-empty">Loading unearned trophies…</p>
+              ) : null}
+
+              {!unearnedTrophiesLoading &&
+              !unearnedTrophiesError &&
+              sortedUnearnedTrophies.length === 0 ? (
+                <p className="panel-empty">
+                  No unearned trophies are available across the current PSN trophy history.
+                </p>
+              ) : null}
+
+              {sortedUnearnedTrophies.length > 0 ? (
+                <>
+                  <div className="all-unearned-list-header" aria-hidden="true">
+                    <span>Trophy</span>
+                    <span>Title</span>
+                    <span>Group</span>
+                    <span>Grade</span>
+                    <span>Earned rate</span>
+                    <span>Status</span>
+                  </div>
+
+                  <div className="all-unearned-list">
+                    {sortedUnearnedTrophies.map((trophy) => {
+                      const trophyKey = buildTrophySelectionKey(
+                        trophy.npCommunicationId,
+                        trophy.trophyGroupId,
+                        trophy.trophyId,
+                      );
+
+                      return (
+                        <button
+                          key={trophyKey}
+                          type="button"
+                          className={`all-unearned-row ${trophy.target ? "is-target" : ""}`}
+                          disabled={targetPendingKey === trophyKey}
+                          onClick={() => void updateTargetTrophyForTitle(trophy.npCommunicationId, trophy)}
+                        >
+                          <div className="all-unearned-row-primary">
+                            {trophy.iconUrl ? (
+                              <img className="all-unearned-trophy-icon" src={trophy.iconUrl} alt="" />
+                            ) : (
+                              <div
+                                className="all-unearned-trophy-icon all-unearned-trophy-icon-placeholder"
+                                aria-hidden="true"
+                              />
+                            )}
+                            <div className="all-unearned-row-copy">
+                              <div className="all-unearned-row-title">
+                                <img
+                                  className="all-unearned-row-grade-icon"
+                                  src={trophyBrowserGradeIcon[trophy.grade]}
+                                  alt=""
+                                />
+                                <h3>{trophy.name ?? "Unnamed trophy"}</h3>
+                              </div>
+                              <p>{trophy.description ?? "No trophy description is available."}</p>
+                            </div>
+                          </div>
+
+                          <div className="all-unearned-row-title-meta">
+                            {trophy.titleIconUrl ? (
+                              <img className="all-unearned-title-icon" src={trophy.titleIconUrl} alt="" />
+                            ) : (
+                              <div
+                                className="all-unearned-title-icon all-unearned-title-icon-placeholder"
+                                aria-hidden="true"
+                              />
+                            )}
+                            <div>
+                              <strong>{trophy.titleName}</strong>
+                              <span>
+                                {trophy.platform} · Updated {formatTitleLastUpdated(trophy.titleLastUpdated)}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="all-unearned-row-meta">
+                            <strong>{resolveTrophyBrowserGroupLabel(trophy.trophyGroupId, trophy.groupName)}</strong>
+                          </div>
+
+                          <div className="all-unearned-row-meta">
+                            <strong>{trophy.grade}</strong>
+                          </div>
+
+                          <div className="all-unearned-row-rate">
+                            <strong>{formatEarnedRate(trophy.trophyEarnedRate)}</strong>
+                          </div>
+
+                          <div className="all-unearned-row-status">
+                            {trophy.target ? (
+                              <span className="trophy-chip trophy-chip-earned">Current target</span>
+                            ) : null}
+                            {trophy.hidden ? (
+                              <span className="trophy-chip trophy-chip-unearned">Secret</span>
+                            ) : null}
+                            {targetPendingKey === trophyKey ? (
+                              <span className="trophy-chip trophy-chip-earned">Saving…</span>
+                            ) : null}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : null}
             </div>
           </section>
         ) : null}
@@ -1820,10 +2444,12 @@ function DashboardTopBar({
   trophyBrowserAvailable,
   workspaceTab,
   currentTargetSelectionKey,
+  currentTargetClearPendingKey,
   targetPendingKey,
   onSelectSetup,
   onSelectGames,
   onSelectTrophies,
+  onSelectAllUnearned,
   onClearTarget,
   onOpenPsnAccess,
   onRefresh,
@@ -1833,10 +2459,12 @@ function DashboardTopBar({
   trophyBrowserAvailable: boolean;
   workspaceTab: WorkspaceTab;
   currentTargetSelectionKey: string | null;
+  currentTargetClearPendingKey: string | null;
   targetPendingKey: string | null;
   onSelectSetup: () => void;
   onSelectGames: () => void;
   onSelectTrophies: () => void;
+  onSelectAllUnearned: () => void;
   onClearTarget: () => void;
   onOpenPsnAccess: () => void;
   onRefresh: () => void;
@@ -1915,6 +2543,19 @@ function DashboardTopBar({
                   Trophy Browser
                 </button>
               ) : null}
+              {trophyBrowserAvailable ? (
+                <button
+                  id="workspace-tab-all-unearned"
+                  className={`workspace-tab ${workspaceTab === "allUnearned" ? "is-active" : ""}`}
+                  role="tab"
+                  type="button"
+                  aria-selected={workspaceTab === "allUnearned"}
+                  aria-controls="workspace-panel-all-unearned"
+                  onClick={onSelectAllUnearned}
+                >
+                  All Unearned
+                </button>
+              ) : null}
             </div>
           </div>
 
@@ -1924,7 +2565,7 @@ function DashboardTopBar({
             {workspaceTab === "trophies" && currentTargetSelectionKey ? (
               <button
                 className="ghost-button"
-                disabled={targetPendingKey === "clear"}
+                disabled={targetPendingKey === currentTargetClearPendingKey}
                 onClick={onClearTarget}
               >
                 Clear target

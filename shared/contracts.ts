@@ -66,6 +66,8 @@ export interface TrophyBrowserItem {
   earnedAt: string | null;
   hidden: boolean;
   groupName: string | null;
+  trophyRare?: number | null;
+  trophyEarnedRate?: number | null;
 }
 
 export interface ApiErrorPayload {
@@ -118,6 +120,38 @@ export interface TitleTrophiesResponse {
   title: RecentTitleSummary | null;
   trophies: TrophyBrowserItem[];
   target: TargetTrophySelection | null;
+  meta: {
+    fetchedAt: string;
+    cached: boolean;
+    warnings: string[];
+    partial: boolean;
+  };
+  error?: ApiErrorPayload;
+}
+
+export interface UnearnedTrophyItem {
+  npCommunicationId: string;
+  trophyId: number;
+  trophyGroupId: string;
+  name: string | null;
+  description: string | null;
+  iconUrl: string | null;
+  grade: GradeKey;
+  earned: false;
+  earnedAt: null;
+  hidden: boolean;
+  groupName: string | null;
+  trophyRare: number | null;
+  trophyEarnedRate: number | null;
+  titleName: string;
+  titleIconUrl: string;
+  platform: string;
+  titleLastUpdated: string | null;
+  target: boolean;
+}
+
+export interface UnearnedTrophiesResponse {
+  trophies: UnearnedTrophyItem[];
   meta: {
     fetchedAt: string;
     cached: boolean;

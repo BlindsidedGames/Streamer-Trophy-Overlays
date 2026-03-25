@@ -16,6 +16,7 @@ import {
   type TitleTrophiesResponse,
   type TrophyBrowserItem,
   type TrophySummaryResponse,
+  type UnearnedTrophiesResponse,
   type UpdateTargetTrophyRequest,
 } from "../shared/contracts.js";
 import { App } from "./App.js";
@@ -73,25 +74,25 @@ const summary: TrophySummaryResponse = {
       titleName: "Bluey",
       platform: "PS5",
       iconUrl: "https://example.com/bluey.png",
-      progress: 100,
+      progress: 60,
       earnedCounts: {
-        platinum: 1,
-        gold: 8,
-        silver: 8,
-        bronze: 6,
-        total: 23,
+        platinum: 0,
+        gold: 1,
+        silver: 1,
+        bronze: 1,
+        total: 3,
       },
       definedCounts: {
         platinum: 1,
-        gold: 8,
-        silver: 8,
-        bronze: 6,
-        total: 23,
+        gold: 1,
+        silver: 1,
+        bronze: 2,
+        total: 5,
       },
-      earnedTotal: 23,
-      definedTotal: 23,
+      earnedTotal: 3,
+      definedTotal: 5,
       lastUpdated: "2026-03-17T00:00:00Z",
-      hasTrophyGroups: false,
+      hasTrophyGroups: true,
     },
     {
       titleId: "NPWR2",
@@ -155,6 +156,45 @@ const trophiesByTitle: Record<string, TrophyBrowserItem[]> = {
       grade: "silver",
       earned: true,
       earnedAt: "2026-03-15T00:00:00Z",
+      hidden: false,
+      groupName: null,
+    },
+    {
+      npCommunicationId: "NPWR1",
+      trophyId: 4,
+      trophyGroupId: "001",
+      name: "Rainy Day",
+      description: "Complete the backyard course in the rain.",
+      iconUrl: null,
+      grade: "bronze",
+      earned: false,
+      earnedAt: null,
+      hidden: false,
+      groupName: "Puppy Playtime",
+    },
+    {
+      npCommunicationId: "NPWR1",
+      trophyId: 5,
+      trophyGroupId: "001",
+      name: "Backyard Hero",
+      description: "Collect every prize in Puppy Playtime.",
+      iconUrl: null,
+      grade: "gold",
+      earned: true,
+      earnedAt: "2026-03-16T00:00:00Z",
+      hidden: false,
+      groupName: "Puppy Playtime",
+    },
+    {
+      npCommunicationId: "NPWR1",
+      trophyId: 6,
+      trophyGroupId: "002",
+      name: "Night Watch",
+      description: "Complete the bedtime patrol route.",
+      iconUrl: null,
+      grade: "bronze",
+      earned: true,
+      earnedAt: "2026-03-17T00:00:00Z",
       hidden: false,
       groupName: null,
     },
@@ -310,6 +350,115 @@ describe("DashboardApp", () => {
     },
   });
 
+  const unearnedTrophiesResponse = (): UnearnedTrophiesResponse => ({
+    trophies: [
+      {
+        npCommunicationId: "NPWR1",
+        trophyId: 1,
+        trophyGroupId: "default",
+        name: "Best in Show",
+        description: "Earn every trophy in Bluey.",
+        iconUrl: null,
+        grade: "platinum",
+        earned: false,
+        earnedAt: null,
+        hidden: false,
+        groupName: null,
+        trophyRare: 1,
+        trophyEarnedRate: 11.1,
+        titleName: "Bluey",
+        titleIconUrl: "https://example.com/bluey.png",
+        platform: "PS5",
+        titleLastUpdated: "2026-03-17T00:00:00Z",
+        target:
+          targetsByTitle.NPWR1?.trophyId === 1 &&
+          targetsByTitle.NPWR1?.trophyGroupId === "default",
+      },
+      {
+        npCommunicationId: "NPWR1",
+        trophyId: 4,
+        trophyGroupId: "001",
+        name: "Rainy Day",
+        description: "Complete the backyard course in the rain.",
+        iconUrl: null,
+        grade: "bronze",
+        earned: false,
+        earnedAt: null,
+        hidden: false,
+        groupName: "Puppy Playtime",
+        trophyRare: 3,
+        trophyEarnedRate: 48.7,
+        titleName: "Bluey",
+        titleIconUrl: "https://example.com/bluey.png",
+        platform: "PS5",
+        titleLastUpdated: "2026-03-17T00:00:00Z",
+        target:
+          targetsByTitle.NPWR1?.trophyId === 4 &&
+          targetsByTitle.NPWR1?.trophyGroupId === "001",
+      },
+      {
+        npCommunicationId: "NPWR2",
+        trophyId: 2,
+        trophyGroupId: "default",
+        name: "Galaxy Champion",
+        description: "Save the stars and clean up every world.",
+        iconUrl: null,
+        grade: "gold",
+        earned: false,
+        earnedAt: null,
+        hidden: false,
+        groupName: null,
+        trophyRare: 2,
+        trophyEarnedRate: 22.2,
+        titleName: "Astro Bot",
+        titleIconUrl: "https://example.com/astro.png",
+        platform: "PS5",
+        titleLastUpdated: "2026-03-16T00:00:00Z",
+        target:
+          targetsByTitle.NPWR2?.trophyId === 2 &&
+          targetsByTitle.NPWR2?.trophyGroupId === "default",
+      },
+      {
+        npCommunicationId: "NPWR2",
+        trophyId: 8,
+        trophyGroupId: "default",
+        name: "Mystery Signal",
+        description: "Find the hidden transmission.",
+        iconUrl: null,
+        grade: "silver",
+        earned: false,
+        earnedAt: null,
+        hidden: true,
+        groupName: null,
+        trophyRare: 1,
+        trophyEarnedRate: null,
+        titleName: "Astro Bot",
+        titleIconUrl: "https://example.com/astro.png",
+        platform: "PS5",
+        titleLastUpdated: "2026-03-16T00:00:00Z",
+        target:
+          targetsByTitle.NPWR2?.trophyId === 8 &&
+          targetsByTitle.NPWR2?.trophyGroupId === "default",
+      },
+    ],
+    meta: {
+      fetchedAt: "2026-03-17T00:00:00Z",
+      cached: false,
+      warnings: [],
+      partial: false,
+    },
+  });
+
+  const openTrophyBrowser = async () => {
+    fireEvent.click(await screen.findByRole("tab", { name: "Trophy Browser" }));
+    return screen.getByRole("tabpanel", { name: "Trophy Browser" });
+  };
+
+  const openAllUnearned = async () => {
+    fireEvent.click(await screen.findByRole("tab", { name: "All Unearned" }));
+    return screen.getByRole("tabpanel", { name: "All Unearned" });
+  };
+
   beforeEach(() => {
     originalDesktopRuntime = window.streamerToolsDesktop;
     activeGame = createDefaultActiveGameSelection();
@@ -378,6 +527,13 @@ describe("DashboardApp", () => {
         return {
           ok: true,
           json: async () => titleTrophiesResponse(titleId),
+        };
+      }
+
+      if (input === "/api/trophies/unearned") {
+        return {
+          ok: true,
+          json: async () => unearnedTrophiesResponse(),
         };
       }
 
@@ -869,35 +1025,138 @@ describe("DashboardApp", () => {
 
   it("pins a trophy as the current target and exposes the clear action", async () => {
     const { container } = render(<App />);
-
-    fireEvent.click(await screen.findByRole("tab", { name: "Trophy Browser" }));
-
-    const trophyButton = await within(
-      screen.getByRole("tabpanel", { name: "Trophy Browser" }),
-    ).findByRole("button", { name: /Best in Show/i });
+    const trophyBrowserPanel = await openTrophyBrowser();
+    const trophyButton = await within(trophyBrowserPanel).findByRole("button", {
+      name: /Best in Show/i,
+    });
     fireEvent.click(trophyButton);
 
     expect(screen.queryByRole("heading", { name: "Featured on stream" })).not.toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Clear target" })).toBeInTheDocument();
-    expect(container.querySelector(".trophy-pinned .trophy-card-featured")).toBeTruthy();
+    expect(container.querySelector(".trophy-browser-target-rail .trophy-card-featured")).toBeTruthy();
+    expect(screen.queryByText("Pinned target")).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/target-trophy",
       expect.objectContaining({ method: "PUT" }),
     );
   });
 
-  it("splits the trophy browser into unearned and earned sections", async () => {
+  it("renders group tabs with percentages and filters unearned trophies by scope", async () => {
     const { container } = render(<App />);
+    const trophyBrowserPanel = await openTrophyBrowser();
+    const tabList = within(trophyBrowserPanel).getByRole("tablist", {
+      name: "Trophy browser groups",
+    });
+    const tabs = within(tabList).getAllByRole("tab");
 
-    fireEvent.click(await screen.findByRole("tab", { name: "Trophy Browser" }));
+    expect(tabs).toHaveLength(5);
+    expect(within(tabs[0] as HTMLElement).getByText("All")).toBeInTheDocument();
+    expect(within(tabs[0] as HTMLElement).getByText("60%")).toBeInTheDocument();
+    expect(within(tabs[1] as HTMLElement).getByText("Main Game")).toBeInTheDocument();
+    expect(within(tabs[1] as HTMLElement).getByText("50%")).toBeInTheDocument();
+    expect(within(tabs[2] as HTMLElement).getByText("Puppy Playtime")).toBeInTheDocument();
+    expect(within(tabs[2] as HTMLElement).getByText("50%")).toBeInTheDocument();
+    expect(within(tabs[3] as HTMLElement).getByText("DLC 002")).toBeInTheDocument();
+    expect(within(tabs[3] as HTMLElement).getByText("100%")).toBeInTheDocument();
+    expect(within(tabs[4] as HTMLElement).getByText("Earned")).toBeInTheDocument();
+    expect(within(trophyBrowserPanel).getByText("Unearned trophies 2")).toBeInTheDocument();
+    expect(within(trophyBrowserPanel).getByText("Best in Show")).toBeInTheDocument();
+    expect(within(trophyBrowserPanel).getByText("Rainy Day")).toBeInTheDocument();
+    expect(within(trophyBrowserPanel).queryByText("Family Photo")).not.toBeInTheDocument();
+    expect(container.querySelectorAll(".trophy-card-grid")).toHaveLength(1);
+
+    fireEvent.click(within(tabList).getByRole("tab", { name: /Main Game/i }));
+    expect(within(trophyBrowserPanel).getByText("Unearned trophies 1")).toBeInTheDocument();
+    expect(within(trophyBrowserPanel).getByText("Best in Show")).toBeInTheDocument();
+    expect(within(trophyBrowserPanel).queryByText("Rainy Day")).not.toBeInTheDocument();
+    expect(within(trophyBrowserPanel).queryByText("No unearned trophies in this tab.")).not.toBeInTheDocument();
+
+    fireEvent.click(within(tabList).getByRole("tab", { name: /Puppy Playtime/i }));
+    expect(within(trophyBrowserPanel).getByText("Unearned trophies 1")).toBeInTheDocument();
+    expect(within(trophyBrowserPanel).getByText("Rainy Day")).toBeInTheDocument();
+    expect(within(trophyBrowserPanel).queryByText("Best in Show")).not.toBeInTheDocument();
+
+    fireEvent.click(within(tabList).getByRole("tab", { name: /DLC 002/i }));
+    expect(within(trophyBrowserPanel).getByText("Unearned trophies 0")).toBeInTheDocument();
+    expect(within(trophyBrowserPanel).getByText("No unearned trophies in this tab.")).toBeInTheDocument();
+  });
+
+  it("shows the earned tab and keeps the pinned target visible above the browser across sub-tabs", async () => {
+    const { container } = render(<App />);
+    const trophyBrowserPanel = await openTrophyBrowser();
+    const trophyBrowserSurface = trophyBrowserPanel.querySelector(
+      ".trophy-browser-surface",
+    ) as HTMLElement;
+    const tabList = within(trophyBrowserPanel).getByRole("tablist", {
+      name: "Trophy browser groups",
+    });
+
+    fireEvent.click(within(trophyBrowserPanel).getByRole("button", { name: /Best in Show/i }));
 
     await waitFor(() => {
-      expect(screen.getAllByText("Unearned trophies").length).toBeGreaterThan(0);
+      expect(screen.getByRole("button", { name: "Clear target" })).toBeInTheDocument();
     });
-    expect(screen.getAllByText("Earned trophies").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Family Photo").length).toBeGreaterThan(0);
-    expect(container.querySelectorAll(".trophy-card-grid")).toHaveLength(2);
-    expect(container.querySelector(".trophy-browser-stack")).toBeTruthy();
+    expect(container.querySelector(".trophy-browser-target-rail .trophy-card-featured")).toBeTruthy();
+    expect(within(trophyBrowserSurface).getByText("Unearned trophies 2")).toBeInTheDocument();
+    expect(within(trophyBrowserSurface).queryByText("Best in Show")).not.toBeInTheDocument();
+    expect(within(trophyBrowserSurface).getByText("Rainy Day")).toBeInTheDocument();
+
+    fireEvent.click(within(tabList).getByRole("tab", { name: /Main Game/i }));
+
+    expect(within(trophyBrowserSurface).getByText("Unearned trophies 1")).toBeInTheDocument();
+    expect(within(trophyBrowserSurface).queryByText("Best in Show")).not.toBeInTheDocument();
+    expect(within(trophyBrowserSurface).queryByText("No unearned trophies in this tab.")).not.toBeInTheDocument();
+    expect(within(trophyBrowserPanel).getByRole("tab", { name: /Main Game/i })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+
+    fireEvent.click(within(tabList).getByRole("tab", { name: /Earned/i }));
+
+    expect(within(trophyBrowserSurface).getByText("Earned trophies 3")).toBeInTheDocument();
+    expect(within(trophyBrowserSurface).getByText("Family Photo")).toBeInTheDocument();
+    expect(within(trophyBrowserSurface).getByText("Backyard Hero")).toBeInTheDocument();
+    expect(within(trophyBrowserSurface).getByText("Night Watch")).toBeInTheDocument();
+    expect(within(trophyBrowserSurface).queryByText("Best in Show")).not.toBeInTheDocument();
+  });
+
+  it("preserves the current sub-tab during target updates and resets it when switching titles", async () => {
+    render(<App />);
+    const trophyBrowserPanel = await openTrophyBrowser();
+    const tabList = within(trophyBrowserPanel).getByRole("tablist", {
+      name: "Trophy browser groups",
+    });
+
+    fireEvent.click(within(tabList).getByRole("tab", { name: /Puppy Playtime/i }));
+    fireEvent.click(within(trophyBrowserPanel).getByRole("button", { name: /Rainy Day/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Clear target" })).toBeInTheDocument();
+    });
+    expect(within(trophyBrowserPanel).getByRole("tab", { name: /Puppy Playtime/i })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "Game Selection" }));
+    const gamesPanel = await screen.findByRole("tabpanel", { name: "Game Selection" });
+    fireEvent.click(within(gamesPanel).getByRole("button", { name: /Astro Bot/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "Trophy Browser" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+    });
+
+    const refreshedTrophyBrowserPanel = screen.getByRole("tabpanel", { name: "Trophy Browser" });
+    const refreshedTabList = within(refreshedTrophyBrowserPanel).getByRole("tablist", {
+      name: "Trophy browser groups",
+    });
+    expect(within(refreshedTabList).getByRole("tab", { name: /All/i })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
   });
 
   it("keeps clear target in the trophy browser header and removes empty targets from loop data", async () => {
@@ -908,8 +1167,7 @@ describe("DashboardApp", () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByRole("tab", { name: "Trophy Browser" }));
-    const trophyBrowserPanel = screen.getByRole("tabpanel", { name: "Trophy Browser" });
+    const trophyBrowserPanel = await openTrophyBrowser();
 
     const [trophyButton] = await within(trophyBrowserPanel).findAllByRole("button", {
       name: /Best in Show/i,
@@ -931,8 +1189,7 @@ describe("DashboardApp", () => {
 
   it("keeps the shared top bar free of trophy-specific title copy", async () => {
     const { container } = render(<App />);
-
-    fireEvent.click(await screen.findByRole("tab", { name: "Trophy Browser" }));
+    await openTrophyBrowser();
 
     const topBar = container.querySelector(".app-topbar") as HTMLElement;
 
@@ -1367,5 +1624,118 @@ describe("DashboardApp", () => {
     const activeCard = within(refreshedGamePanel).getByRole("button", { name: /Astro Bot/i });
     expect(within(activeCard).getByText("Active")).toBeInTheDocument();
     expect(container.querySelector(".title-card-active .title-card-badge")).toBeTruthy();
+  });
+
+  it("loads all unearned trophies on demand and reuses the loaded state", async () => {
+    render(<App />);
+
+    expect(
+      fetchMock.mock.calls.filter(([input]) => input === "/api/trophies/unearned"),
+    ).toHaveLength(0);
+
+    const unearnedPanel = await openAllUnearned();
+    await waitFor(() => {
+      expect(unearnedPanel.querySelectorAll(".all-unearned-row")).toHaveLength(4);
+    });
+    expect(within(unearnedPanel).getByText(/All unearned trophies/i)).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.filter(([input]) => input === "/api/trophies/unearned"),
+    ).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Game Selection" }));
+    fireEvent.click(screen.getByRole("tab", { name: "All Unearned" }));
+
+    expect(
+      fetchMock.mock.calls.filter(([input]) => input === "/api/trophies/unearned"),
+    ).toHaveLength(1);
+  });
+
+  it("sorts the all unearned list locally with the setup-style dropdown", async () => {
+    render(<App />);
+
+    const unearnedPanel = await openAllUnearned();
+    const sortSelect = within(unearnedPanel).getByLabelText(
+      "All unearned sort order",
+    ) as HTMLSelectElement;
+    const getVisibleNames = () =>
+      Array.from(unearnedPanel.querySelectorAll(".all-unearned-row h3")).map((node) => node.textContent);
+
+    await waitFor(() => {
+      expect(getVisibleNames()).toHaveLength(4);
+    });
+    expect(sortSelect.closest(".select-field-control")).not.toBeNull();
+    expect(getVisibleNames()).toEqual([
+      "Rainy Day",
+      "Galaxy Champion",
+      "Best in Show",
+      "Mystery Signal",
+    ]);
+
+    fireEvent.change(sortSelect, { target: { value: "hardestFirst" } });
+    expect(getVisibleNames()).toEqual([
+      "Best in Show",
+      "Galaxy Champion",
+      "Rainy Day",
+      "Mystery Signal",
+    ]);
+
+    fireEvent.change(sortSelect, { target: { value: "titleAsc" } });
+    expect(getVisibleNames()).toEqual([
+      "Galaxy Champion",
+      "Mystery Signal",
+      "Rainy Day",
+      "Best in Show",
+    ]);
+
+    fireEvent.change(sortSelect, { target: { value: "recentlyActiveTitle" } });
+    expect(getVisibleNames()).toEqual([
+      "Rainy Day",
+      "Best in Show",
+      "Galaxy Champion",
+      "Mystery Signal",
+    ]);
+
+    expect(
+      fetchMock.mock.calls.filter(([input]) => input === "/api/trophies/unearned"),
+    ).toHaveLength(1);
+  });
+
+  it("updates the target trophy from the all unearned list without changing the active title", async () => {
+    render(<App />);
+
+    const previousSelectedTitleId = activeGame.selectedNpCommunicationId;
+    const unearnedPanel = await openAllUnearned();
+    const galaxyRow = await within(unearnedPanel).findByRole("button", {
+      name: /Galaxy Champion/i,
+    });
+
+    fireEvent.click(galaxyRow);
+
+    await waitFor(() => {
+      expect(targetsByTitle.NPWR2?.trophyId).toBe(2);
+    });
+
+    expect(within(unearnedPanel).getByText("Current target")).toBeInTheDocument();
+    expect(activeGame.selectedNpCommunicationId).toBe(previousSelectedTitleId);
+  });
+
+  it("does not refetch all unearned trophies when refresh all is used", async () => {
+    render(<App />);
+
+    await openAllUnearned();
+    expect(
+      fetchMock.mock.calls.filter(([input]) => input === "/api/trophies/unearned"),
+    ).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh all" }));
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.filter(([input]) => input === "/api/trophies/summary"),
+      ).toHaveLength(2);
+    });
+    expect(
+      fetchMock.mock.calls.filter(([input]) => input === "/api/trophies/unearned"),
+    ).toHaveLength(1);
   });
 });

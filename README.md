@@ -12,12 +12,32 @@ PSN Trophy Overlay Suite is a Windows desktop streamer overlay app for PlayStati
 ## PSN access setup
 
 To load PlayStation data, the app needs a saved NPSSO token for your account.
+That NPSSO is the Sony cookie value that `psn-api` uses as the starting point for
+its authentication flow. The app only asks you for the NPSSO; it handles the
+rest of the token exchange internally.
 
-1. Sign in to your PlayStation account.
-2. Open `https://ca.account.sony.com/api/v1/ssocookie`.
-3. Copy the NPSSO token shown by Sony.
-4. Launch **PSN Trophy Overlay Suite** and open `PSN access`.
-5. Paste the token into the `PSN token` field and click `Save token`.
+### Get your NPSSO token
+
+1. In a desktop web browser, go to `https://www.playstation.com/` and sign in
+   with the PSN account you want the app to use.
+2. Stay in that same signed-in browser session, then open
+   `https://ca.account.sony.com/api/v1/ssocookie`.
+3. Sony should return JSON that looks like this:
+
+```json
+{ "npsso": "<64-character-token>" }
+```
+
+4. Copy only the `npsso` value. Treat it like a password and do not share it or
+   show it on stream.
+5. If Sony returns an error or the page does not include `npsso`, try again in
+   the same signed-in browser session or use a different browser.
+
+### Save it in PSN Trophy Overlay Suite
+
+1. Launch **PSN Trophy Overlay Suite** and open `PSN access`.
+2. Paste the NPSSO into the `PSN token` field.
+3. Click `Save token`.
 
 The saved token stays on your local machine and is not read from `.env`. The app keeps the token in local storage files and does not return the saved value to the UI after it is stored.
 

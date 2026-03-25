@@ -10,6 +10,7 @@ import {
   type TitleSearchResponse,
   type TitleTrophiesResponse,
   type TrophySummaryResponse,
+  type UnearnedTrophiesResponse,
 } from "../shared/contracts.js";
 import { createApp } from "./app.js";
 import { AppError } from "./errors.js";
@@ -40,6 +41,16 @@ const createPsnTokenStatusResponse = (
   updatedAt: configured ? "2026-03-17T00:00:00Z" : null,
 });
 
+const createUnearnedTrophiesResponse = (): UnearnedTrophiesResponse => ({
+  trophies: [],
+  meta: {
+    fetchedAt: "2026-03-17T00:00:00Z",
+    cached: false,
+    warnings: [],
+    partial: false,
+  },
+});
+
 describe("createApp", () => {
   it("returns overlay data from the service", async () => {
     const app = createApp({
@@ -65,6 +76,8 @@ describe("createApp", () => {
       searchTitles: async (): Promise<TitleSearchResponse> => createTitleSearchResponse(),
       getTitleTrophies: async (): Promise<TitleTrophiesResponse> =>
         createTitleTrophiesResponse(),
+      getUnearnedTrophies: async (): Promise<UnearnedTrophiesResponse> =>
+        createUnearnedTrophiesResponse(),
       getSettings: () => createDefaultOverlaySettings(),
       updateSettings: (settings) => settings,
       getActiveGame: () => createDefaultActiveGameSelection(),
@@ -107,6 +120,90 @@ describe("createApp", () => {
     expect(response.body.overall.onlineId).toBe("Vathreon");
   });
 
+  it("returns aggregated unearned trophies from the service", async () => {
+    const app = createApp({
+      getHealth: (): HealthResponse => ({
+        status: "ok",
+        configured: true,
+        source: "psn-api",
+      }),
+      getPsnTokenStatus: () => createPsnTokenStatusResponse(),
+      savePsnToken: () => createPsnTokenStatusResponse(),
+      clearPsnToken: () => createPsnTokenStatusResponse(false),
+      getSummary: async (): Promise<TrophySummaryResponse> => ({
+        profile: null,
+        titles: [],
+        meta: {
+          fetchedAt: "2026-03-17T00:00:00Z",
+          cached: false,
+          warnings: [],
+          partial: false,
+          source: "psn-api",
+        },
+      }),
+      searchTitles: async (): Promise<TitleSearchResponse> => createTitleSearchResponse(),
+      getTitleTrophies: async (): Promise<TitleTrophiesResponse> =>
+        createTitleTrophiesResponse(),
+      getUnearnedTrophies: async (): Promise<UnearnedTrophiesResponse> => ({
+        trophies: [
+          {
+            npCommunicationId: "NPWR1",
+            trophyId: 1,
+            trophyGroupId: "default",
+            name: "Best in Show",
+            description: "Earn every trophy in Bluey.",
+            iconUrl: null,
+            grade: "platinum",
+            earned: false,
+            earnedAt: null,
+            hidden: false,
+            groupName: null,
+            trophyRare: 1,
+            trophyEarnedRate: 11.1,
+            titleName: "Bluey",
+            titleIconUrl: "https://example.com/bluey.png",
+            platform: "PS5",
+            titleLastUpdated: "2026-03-17T00:00:00Z",
+            target: false,
+          },
+        ],
+        meta: {
+          fetchedAt: "2026-03-17T00:00:00Z",
+          cached: false,
+          warnings: [],
+          partial: false,
+        },
+      }),
+      getSettings: () => createDefaultOverlaySettings(),
+      updateSettings: (settings) => settings,
+      getActiveGame: () => createDefaultActiveGameSelection(),
+      updateActiveGame: (activeGame) => activeGame,
+      updateTargetTrophy: () => null,
+      getOverlayData: async (): Promise<OverlayDataResponse> => ({
+        overall: null,
+        currentGame: null,
+        targetTrophy: null,
+        display: {
+          settings: createDefaultOverlaySettings(),
+          loopOrder: ["overall", "currentGame"],
+          lastRefreshAt: "2026-03-17T00:00:00Z",
+        },
+        meta: {
+          fetchedAt: "2026-03-17T00:00:00Z",
+          cached: false,
+          warnings: [],
+          partial: false,
+        },
+      }),
+    });
+
+    const response = await request(app).get("/api/trophies/unearned");
+
+    expect(response.status).toBe(200);
+    expect(response.body.trophies[0].titleName).toBe("Bluey");
+    expect(response.body.trophies[0].trophyEarnedRate).toBe(11.1);
+  });
+
   it("persists settings via the service endpoints", async () => {
     const nextSettings = {
       ...createDefaultOverlaySettings(),
@@ -145,6 +242,8 @@ describe("createApp", () => {
       searchTitles: async (): Promise<TitleSearchResponse> => createTitleSearchResponse(),
       getTitleTrophies: async (): Promise<TitleTrophiesResponse> =>
         createTitleTrophiesResponse(),
+      getUnearnedTrophies: async (): Promise<UnearnedTrophiesResponse> =>
+        createUnearnedTrophiesResponse(),
       getSettings: () => createDefaultOverlaySettings(),
       updateSettings: (settings) => settings,
       getActiveGame: () => createDefaultActiveGameSelection(),
@@ -216,6 +315,8 @@ describe("createApp", () => {
       searchTitles: async (): Promise<TitleSearchResponse> => createTitleSearchResponse(),
       getTitleTrophies: async (): Promise<TitleTrophiesResponse> =>
         createTitleTrophiesResponse(),
+      getUnearnedTrophies: async (): Promise<UnearnedTrophiesResponse> =>
+        createUnearnedTrophiesResponse(),
       getSettings: () => failingSettings,
       updateSettings: (settings) => settings,
       getActiveGame: () => createDefaultActiveGameSelection(),
@@ -265,6 +366,8 @@ describe("createApp", () => {
       searchTitles: async (): Promise<TitleSearchResponse> => createTitleSearchResponse(),
       getTitleTrophies: async (): Promise<TitleTrophiesResponse> =>
         createTitleTrophiesResponse(),
+      getUnearnedTrophies: async (): Promise<UnearnedTrophiesResponse> =>
+        createUnearnedTrophiesResponse(),
       getSettings: () => createDefaultOverlaySettings(),
       updateSettings: (settings) => settings,
       getActiveGame: () => createDefaultActiveGameSelection(),
@@ -334,6 +437,8 @@ describe("createApp", () => {
       searchTitles: async (): Promise<TitleSearchResponse> => createTitleSearchResponse(),
       getTitleTrophies: async (): Promise<TitleTrophiesResponse> =>
         createTitleTrophiesResponse(),
+      getUnearnedTrophies: async (): Promise<UnearnedTrophiesResponse> =>
+        createUnearnedTrophiesResponse(),
       getSettings: () => createDefaultOverlaySettings(),
       updateSettings: (settings) => settings,
       getActiveGame: () => createDefaultActiveGameSelection(),

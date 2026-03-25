@@ -11,6 +11,7 @@ import type {
   TargetTrophySelection,
   TitleSearchResponse,
   TitleTrophiesResponse,
+  UnearnedTrophiesResponse,
   TrophyCountsSummary,
   TrophySummaryResponse,
   UpdateTargetTrophyRequest,
@@ -35,6 +36,7 @@ export interface OverlaySuiteService {
     limit?: number | null,
   ): Promise<TitleSearchResponse>;
   getTitleTrophies(npCommunicationId: string): Promise<TitleTrophiesResponse>;
+  getUnearnedTrophies(): Promise<UnearnedTrophiesResponse>;
   getSettings(): OverlaySettings;
   updateSettings(settings: OverlaySettings): OverlaySettings;
   getActiveGame(): ActiveGameSelection;
@@ -81,6 +83,25 @@ export class RealOverlaySuiteService implements OverlaySuiteService {
     return {
       ...data,
       target: this.stateStore.getTargetTrophy(npCommunicationId),
+    };
+  }
+
+  async getUnearnedTrophies(): Promise<UnearnedTrophiesResponse> {
+    const data = await this.summaryService.getUnearnedTrophies();
+    const targetsByTitle = this.stateStore.getTargetTrophies();
+
+    return {
+      ...data,
+      trophies: data.trophies.map((trophy) => {
+        const target = targetsByTitle[trophy.npCommunicationId] ?? null;
+
+        return {
+          ...trophy,
+          target:
+            target?.trophyId === trophy.trophyId &&
+            target?.trophyGroupId === trophy.trophyGroupId,
+        };
+      }),
     };
   }
 
