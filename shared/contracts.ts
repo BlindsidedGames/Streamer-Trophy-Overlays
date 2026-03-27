@@ -1,6 +1,10 @@
 export type GradeKey = "platinum" | "gold" | "silver" | "bronze";
 export type FieldSource = "psn" | "override" | "custom" | "none";
-export type OverlayView = "overall" | "currentGame" | "targetTrophy";
+export type OverlayView =
+  | "overall"
+  | "unearnedTrophies"
+  | "currentGame"
+  | "targetTrophy";
 
 export interface TrophyCountsSummary {
   bronze: number;
@@ -9,6 +13,14 @@ export interface TrophyCountsSummary {
   platinum: number;
   total: number;
 }
+
+export const createEmptyTrophyCountsSummary = (): TrophyCountsSummary => ({
+  bronze: 0,
+  silver: 0,
+  gold: 0,
+  platinum: 0,
+  total: 0,
+});
 
 export interface PartialTrophyCounts {
   bronze: number | null;
@@ -177,6 +189,56 @@ export interface UpdatePsnTokenRequest {
   token: string;
 }
 
+export type BrbStatus = "stopped" | "running" | "paused" | "expired";
+
+export interface OverlayBrbCard {
+  status: BrbStatus;
+  visible: boolean;
+  remainingMs: number;
+  sessionDurationMs: number;
+  endsAt: string | null;
+  updatedAt: string;
+}
+
+export type UpdateBrbRequest =
+  | {
+      action: "start";
+    }
+  | {
+      action: "pause";
+    }
+  | {
+      action: "resume";
+    }
+  | {
+      action: "stop";
+    }
+  | {
+      action: "setVisibility";
+      visible: boolean;
+    };
+
+export interface OverlayEarnedSessionCard {
+  visible: boolean;
+  sessionStartedAt: string;
+  counts: TrophyCountsSummary;
+  totalEarnedCount: number;
+  updatedAt: string;
+}
+
+export type UpdateEarnedSessionRequest =
+  | {
+      action: "reset";
+    }
+  | {
+      action: "setVisibility";
+      visible: boolean;
+    }
+  | {
+      action: "increment";
+      grade: GradeKey;
+    };
+
 export const defaultStripZoneOrder = [
   "artwork",
   "identity",
@@ -186,36 +248,115 @@ export const defaultStripZoneOrder = [
 ] as const;
 
 export type StripZoneKey = (typeof defaultStripZoneOrder)[number];
-export const overlayRouteKeys = [
-  "loop",
+export const loopOverlayViews = [
+  "overall",
+  "unearnedTrophies",
+  "currentGame",
   "targetTrophy",
+] as const;
+export type LoopOverlayView = (typeof loopOverlayViews)[number];
+export const stripOverlayViews = [
   "overall",
   "currentGame",
+  "unearnedTrophies",
 ] as const;
-export type OverlayRouteKey = (typeof overlayRouteKeys)[number];
+export type StripOverlayView = (typeof stripOverlayViews)[number];
+export type OverlayStripSectionKey = "artwork" | "identity" | "metrics" | "trophies";
+export interface OverlayStripSectionVisibility {
+  artwork: boolean;
+  identity: boolean;
+  metrics: boolean;
+  trophies: boolean;
+}
+export type OverlayStripVisibility = Record<
+  StripOverlayView,
+  OverlayStripSectionVisibility
+>;
+export type OverlayLoopVisibility = Record<LoopOverlayView, boolean>;
+export const overlayRoutePaths = {
+  loop: "/overlay/loop",
+  overall: "/overlay/overall",
+  unearnedTrophies: "/overlay/unearned-trophies",
+  currentGame: "/overlay/current-game",
+  targetTrophy: "/overlay/target-trophy",
+  brb: "/overlay/brb",
+  earnedSession: "/overlay/earned-this-session",
+  cameraBorder: "/overlay/camera-border",
+} as const;
+export type OverlayRouteKey = keyof typeof overlayRoutePaths;
+export const overlayRouteKeys = Object.keys(overlayRoutePaths) as OverlayRouteKey[];
+export const overlayAnchoredRouteKeys = [
+  "loop",
+  "overall",
+  "unearnedTrophies",
+  "currentGame",
+  "targetTrophy",
+  "brb",
+  "earnedSession",
+] as const;
+export type OverlayAnchoredRouteKey = (typeof overlayAnchoredRouteKeys)[number];
 export const overlayAnchorOptions = [
   "top-left",
+  "top-center",
   "top-right",
   "bottom-left",
+  "bottom-center",
   "bottom-right",
 ] as const;
 export type OverlayAnchor = (typeof overlayAnchorOptions)[number];
-export type OverlayAnchors = Record<OverlayRouteKey, OverlayAnchor>;
+export type OverlayAnchors = Record<OverlayAnchoredRouteKey, OverlayAnchor>;
+
+export interface CameraBorderSettings {
+  baseInsetPx: number;
+  baseThicknessPx: number;
+  baseRadiusPx: number;
+  baseCutoutRadiusPx: number;
+  opacityPercent: number;
+}
+
+export interface OverlayCardAppearanceSettings {
+  backgroundTransparencyPercent: number;
+}
+
+export interface OverlayArtworkCardAppearanceSettings
+  extends OverlayCardAppearanceSettings {
+  artworkRadiusPx: number;
+}
+
+export interface OverlayAppearanceSettings {
+  overall: OverlayArtworkCardAppearanceSettings;
+  unearnedTrophies: OverlayCardAppearanceSettings;
+  currentGame: OverlayArtworkCardAppearanceSettings;
+  targetTrophy: OverlayArtworkCardAppearanceSettings;
+  brb: OverlayArtworkCardAppearanceSettings;
+  earnedSession: OverlayCardAppearanceSettings;
+}
 
 export interface OverlaySettings {
   overallDurationMs: number;
+  unearnedTrophiesDurationMs: number;
+  unearnedTrophiesLabelText: string;
   currentGameDurationMs: number;
   targetTrophyDurationMs: number;
-  showStripArtwork: boolean;
-  showStripIdentity: boolean;
-  showStripMetrics: boolean;
-  showStripTrophies: boolean;
+  brbDurationMs: number;
+  stripVisibility: OverlayStripVisibility;
   stripZoneOrder: StripZoneKey[];
-  showTargetTrophyInLoop: boolean;
+  loopVisibility: OverlayLoopVisibility;
   overlayAnchors: OverlayAnchors;
+  showUnearnedDetailedProgress: boolean;
+  showTargetTrophyArtwork: boolean;
   showTargetTrophyInfo: boolean;
   showTargetTrophyTag: boolean;
   targetTrophyTagText: string;
+  showBrbArtwork: boolean;
+  showBrbIdentity: boolean;
+  showBrbProgress: boolean;
+  brbSubtitleText: string;
+  showEarnedSessionIdentity: boolean;
+  showEarnedSessionTrophies: boolean;
+  earnedSessionHeadingText: string;
+  overlayAppearance: OverlayAppearanceSettings;
+  cameraBorder: CameraBorderSettings;
   updatedAt: string;
 }
 
@@ -269,6 +410,14 @@ export interface OverlayCurrentGameCard {
   };
 }
 
+export interface OverlayUnearnedCard {
+  onlineId: string | null;
+  avatarUrl: string | null;
+  completionPercentage: number | null;
+  totalUnearnedCount: number;
+  unearnedCounts: TrophyCountsSummary;
+}
+
 export interface OverlayTargetTrophyCard {
   npCommunicationId: string;
   trophyId: number;
@@ -285,8 +434,11 @@ export interface OverlayTargetTrophyCard {
 
 export interface OverlayDataResponse {
   overall: OverlayOverallCard | null;
+  unearnedTrophies: OverlayUnearnedCard | null;
   currentGame: OverlayCurrentGameCard | null;
   targetTrophy: OverlayTargetTrophyCard | null;
+  brb: OverlayBrbCard;
+  earnedSession: OverlayEarnedSessionCard;
   display: {
     settings: OverlaySettings;
     loopOrder: OverlayView[];
@@ -318,27 +470,131 @@ export const createDefaultCurrentGameOverride = (): CurrentGameOverride => ({
   updatedAt: new Date(0).toISOString(),
 });
 
+export const DEFAULT_BRB_DURATION_MS = 5 * 60 * 1000;
+export const DEFAULT_BRB_SUBTITLE_TEXT = "Intermission";
+export const DEFAULT_UNEARNED_TROPHIES_LABEL_TEXT = "Unearned";
+export const DEFAULT_OVERLAY_BACKGROUND_TRANSPARENCY_PERCENT = 100;
+export const DEFAULT_OVERLAY_ARTWORK_RADIUS_PX = 17;
+export const DEFAULT_CAMERA_BORDER_OPACITY_PERCENT = 96;
+
+export const createDefaultOverlayCardAppearanceSettings =
+  (): OverlayCardAppearanceSettings => ({
+    backgroundTransparencyPercent: DEFAULT_OVERLAY_BACKGROUND_TRANSPARENCY_PERCENT,
+  });
+
+export const createDefaultOverlayArtworkCardAppearanceSettings =
+  (): OverlayArtworkCardAppearanceSettings => ({
+    ...createDefaultOverlayCardAppearanceSettings(),
+    artworkRadiusPx: DEFAULT_OVERLAY_ARTWORK_RADIUS_PX,
+  });
+
+export const createDefaultOverlayAppearanceSettings =
+  (): OverlayAppearanceSettings => ({
+    overall: createDefaultOverlayArtworkCardAppearanceSettings(),
+    unearnedTrophies: createDefaultOverlayCardAppearanceSettings(),
+    currentGame: createDefaultOverlayArtworkCardAppearanceSettings(),
+    targetTrophy: createDefaultOverlayArtworkCardAppearanceSettings(),
+    brb: createDefaultOverlayArtworkCardAppearanceSettings(),
+    earnedSession: createDefaultOverlayCardAppearanceSettings(),
+  });
+
+export const createDefaultCameraBorderSettings = (): CameraBorderSettings => ({
+  baseInsetPx: 30,
+  baseThicknessPx: 36,
+  baseRadiusPx: 24,
+  baseCutoutRadiusPx: 24,
+  opacityPercent: DEFAULT_CAMERA_BORDER_OPACITY_PERCENT,
+});
+
+export const createDefaultBrbState = (
+  durationMs = DEFAULT_BRB_DURATION_MS,
+): OverlayBrbCard => ({
+  status: "stopped",
+  visible: false,
+  remainingMs: durationMs,
+  sessionDurationMs: durationMs,
+  endsAt: null,
+  updatedAt: new Date(0).toISOString(),
+});
+
+export const createDefaultEarnedSessionCard = (
+  now: Date | string = new Date(0),
+): OverlayEarnedSessionCard => {
+  const nowIso = typeof now === "string" ? now : now.toISOString();
+
+  return {
+    visible: false,
+    sessionStartedAt: nowIso,
+    counts: createEmptyTrophyCountsSummary(),
+    totalEarnedCount: 0,
+    updatedAt: nowIso,
+  };
+};
+
 export const createDefaultOverlayAnchors = (): OverlayAnchors => ({
   loop: "bottom-left",
   targetTrophy: "bottom-left",
   overall: "bottom-left",
+  unearnedTrophies: "bottom-left",
   currentGame: "bottom-left",
+  brb: "bottom-left",
+  earnedSession: "bottom-left",
+});
+
+export const createDefaultOverlayStripVisibility =
+  (): OverlayStripVisibility => ({
+    overall: {
+      artwork: true,
+      identity: true,
+      metrics: true,
+      trophies: true,
+    },
+    currentGame: {
+      artwork: true,
+      identity: true,
+      metrics: true,
+      trophies: true,
+    },
+    unearnedTrophies: {
+      artwork: false,
+      identity: true,
+      metrics: true,
+      trophies: true,
+    },
+  });
+
+export const createDefaultOverlayLoopVisibility = (): OverlayLoopVisibility => ({
+  overall: true,
+  unearnedTrophies: false,
+  currentGame: true,
+  targetTrophy: false,
 });
 
 export const createDefaultOverlaySettings = (): OverlaySettings => ({
   overallDurationMs: 5000,
+  unearnedTrophiesDurationMs: 12000,
+  unearnedTrophiesLabelText: DEFAULT_UNEARNED_TROPHIES_LABEL_TEXT,
   currentGameDurationMs: 12000,
   targetTrophyDurationMs: 12000,
-  showStripArtwork: true,
-  showStripIdentity: true,
-  showStripMetrics: true,
-  showStripTrophies: true,
+  brbDurationMs: DEFAULT_BRB_DURATION_MS,
+  stripVisibility: createDefaultOverlayStripVisibility(),
   stripZoneOrder: [...defaultStripZoneOrder],
-  showTargetTrophyInLoop: false,
+  loopVisibility: createDefaultOverlayLoopVisibility(),
   overlayAnchors: createDefaultOverlayAnchors(),
+  showUnearnedDetailedProgress: false,
+  showTargetTrophyArtwork: true,
   showTargetTrophyInfo: true,
   showTargetTrophyTag: true,
   targetTrophyTagText: "Current Target",
+  showBrbArtwork: true,
+  showBrbIdentity: true,
+  showBrbProgress: true,
+  brbSubtitleText: DEFAULT_BRB_SUBTITLE_TEXT,
+  showEarnedSessionIdentity: true,
+  showEarnedSessionTrophies: true,
+  earnedSessionHeadingText: "Earned This Session",
+  overlayAppearance: createDefaultOverlayAppearanceSettings(),
+  cameraBorder: createDefaultCameraBorderSettings(),
   updatedAt: new Date(0).toISOString(),
 });
 

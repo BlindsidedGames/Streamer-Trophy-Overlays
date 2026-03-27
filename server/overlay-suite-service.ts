@@ -2,8 +2,11 @@ import type {
   ActiveGameSelection,
   FieldSource,
   GradeKey,
+  OverlayBrbCard,
   OverlayCurrentGameCard,
   OverlayDataResponse,
+  OverlayEarnedSessionCard,
+  OverlayUnearnedCard,
   OverlaySettings,
   OverlayTargetTrophyCard,
   OverlayView,
@@ -14,6 +17,8 @@ import type {
   UnearnedTrophiesResponse,
   TrophyCountsSummary,
   TrophySummaryResponse,
+  UpdateBrbRequest,
+  UpdateEarnedSessionRequest,
   UpdateTargetTrophyRequest,
 } from "../shared/contracts.js";
 import { StateStore } from "./store.js";
@@ -23,6 +28,12 @@ import {
 } from "./psn-summary-service.js";
 
 const gradeKeys: GradeKey[] = ["platinum", "gold", "silver", "bronze"];
+const fixedLoopOrder: OverlayView[] = [
+  "overall",
+  "unearnedTrophies",
+  "currentGame",
+  "targetTrophy",
+];
 
 export interface OverlaySuiteService {
   getHealth(): ReturnType<PsnSummaryService["getHealth"]>;
@@ -41,6 +52,10 @@ export interface OverlaySuiteService {
   updateSettings(settings: OverlaySettings): OverlaySettings;
   getActiveGame(): ActiveGameSelection;
   updateActiveGame(activeGame: ActiveGameSelection): ActiveGameSelection;
+  getBrbState(): OverlayBrbCard;
+  updateBrbState(request: UpdateBrbRequest): OverlayBrbCard;
+  getEarnedSessionState(): OverlayEarnedSessionCard;
+  updateEarnedSessionState(request: UpdateEarnedSessionRequest): OverlayEarnedSessionCard;
   updateTargetTrophy(
     request: UpdateTargetTrophyRequest,
   ): TargetTrophySelection | null;
@@ -48,6 +63,8 @@ export interface OverlaySuiteService {
 }
 
 export class RealOverlaySuiteService implements OverlaySuiteService {
+  private earnedSessionSyncChain: Promise<void> = Promise.resolve();
+
   constructor(
     private readonly summaryService: PsnSummaryService = new RealPsnSummaryService(),
     private readonly stateStore: StateStore = new StateStore(),
@@ -121,16 +138,50 @@ export class RealOverlaySuiteService implements OverlaySuiteService {
     return this.stateStore.saveActiveGame(activeGame);
   }
 
+  getBrbState() {
+    return this.stateStore.getBrbState();
+  }
+
+  updateBrbState(request: UpdateBrbRequest) {
+    return this.stateStore.updateBrbState(request);
+  }
+
+  getEarnedSessionState() {
+    return this.stateStore.getEarnedSessionState();
+  }
+
+  updateEarnedSessionState(request: UpdateEarnedSessionRequest) {
+    return this.stateStore.updateEarnedSessionState(request);
+  }
+
   updateTargetTrophy(request: UpdateTargetTrophyRequest) {
     return this.stateStore.saveTargetTrophy(request);
   }
 
   async getOverlayData(): Promise<OverlayDataResponse> {
-    const summary = await this.summaryService.getSummary();
+    const [summary, unearnedResult] = await Promise.all([
+      this.summaryService.getSummary(),
+      this.summaryService
+        .getUnearnedTrophies()
+        .then((response) => ({
+          response,
+          error: null as Error | null,
+        }))
+        .catch((error) => ({
+          response: null as Awaited<ReturnType<PsnSummaryService["getUnearnedTrophies"]>> | null,
+          error: error instanceof Error ? error : new Error("Unable to load unearned trophies."),
+        })),
+    ]);
     const settings = this.stateStore.getSettings();
     const activeGame = this.stateStore.getActiveGame();
+    const brb = this.stateStore.getBrbState();
+    const earnedSessionResult = await this.syncEarnedSession(summary);
     const selectedTitle = await this.resolveSelectedTitle(summary, activeGame);
     const currentGame = selectCurrentGame(selectedTitle, activeGame);
+    const unearnedTrophies = buildUnearnedOverlayCard(
+      summary.profile,
+      unearnedResult.response,
+    );
     const targetTrophy = currentGame?.npCommunicationId
       ? await this.resolveTargetTrophy(
           currentGame.npCommunicationId,
@@ -138,9 +189,24 @@ export class RealOverlaySuiteService implements OverlaySuiteService {
           activeGame.mode,
         )
       : null;
-    const loopOrder: OverlayView[] = settings.showTargetTrophyInLoop && targetTrophy
-      ? ["overall", "currentGame", "targetTrophy"]
-      : ["overall", "currentGame"];
+    const warnings = [...summary.meta.warnings];
+
+    if (unearnedResult.error) {
+      warnings.push(`Unearned overlay unavailable: ${unearnedResult.error.message}`);
+    } else if (unearnedResult.response) {
+      warnings.push(...unearnedResult.response.meta.warnings);
+    }
+    warnings.push(...earnedSessionResult.warnings);
+
+    const fetchedAt = resolveLatestTimestamp(
+      summary.meta.fetchedAt,
+      unearnedResult.response?.meta.fetchedAt ?? null,
+    );
+    const loopOrder = fixedLoopOrder.filter(
+      (view) =>
+        settings.loopVisibility[view] &&
+        (view !== "targetTrophy" || targetTrophy !== null),
+    );
 
     return {
       overall: summary.profile
@@ -153,18 +219,25 @@ export class RealOverlaySuiteService implements OverlaySuiteService {
             counts: summary.profile.earnedCounts,
           }
         : null,
+      unearnedTrophies,
       currentGame,
       targetTrophy,
+      brb,
+      earnedSession: earnedSessionResult.card,
       display: {
         settings,
         loopOrder,
-        lastRefreshAt: summary.meta.fetchedAt,
+        lastRefreshAt: fetchedAt,
       },
       meta: {
-        fetchedAt: summary.meta.fetchedAt,
-        cached: summary.meta.cached,
-        warnings: summary.meta.warnings,
-        partial: summary.meta.partial,
+        fetchedAt,
+        cached: summary.meta.cached && (unearnedResult.response?.meta.cached ?? true),
+        warnings,
+        partial:
+          summary.meta.partial ||
+          Boolean(unearnedResult.error) ||
+          earnedSessionResult.warnings.length > 0 ||
+          Boolean(unearnedResult.response?.meta.partial),
       },
     };
   }
@@ -243,6 +316,101 @@ export class RealOverlaySuiteService implements OverlaySuiteService {
       earnedAt: trophy.earnedAt,
       hidden: trophy.hidden,
     };
+  }
+
+  private async syncEarnedSession(summary: TrophySummaryResponse): Promise<{
+    card: OverlayEarnedSessionCard;
+    warnings: string[];
+  }> {
+    const run = async () => {
+      const tracker = this.stateStore.getEarnedSessionTracker();
+      const sessionStartedAtMs = Date.parse(tracker.sessionStartedAt);
+      const countedTrophyKeys = new Set(tracker.countedTrophyKeys);
+      let autoCounts = { ...tracker.autoCounts };
+      let titleSnapshots = { ...tracker.titleSnapshots };
+      let changed = false;
+      const warnings: string[] = [];
+
+      for (const title of summary.titles) {
+        const snapshot = tracker.titleSnapshots[title.npCommunicationId] ?? null;
+        const titleLastUpdated = title.lastUpdated ?? null;
+        const needsRefresh =
+          !snapshot ||
+          snapshot.earnedTotal !== title.earnedTotal ||
+          snapshot.lastUpdated !== titleLastUpdated;
+
+        if (!needsRefresh) {
+          continue;
+        }
+
+        try {
+          const titleTrophies = await this.summaryService.getTitleTrophies(title.npCommunicationId);
+
+          titleTrophies.trophies.forEach((trophy) => {
+            if (!trophy.earned || !trophy.earnedAt) {
+              return;
+            }
+
+            const earnedAtMs = Date.parse(trophy.earnedAt);
+            if (Number.isNaN(earnedAtMs) || earnedAtMs < sessionStartedAtMs) {
+              return;
+            }
+
+            const trophyKey = createEarnedSessionTrophyKey(
+              title.npCommunicationId,
+              trophy.trophyId,
+              trophy.trophyGroupId,
+            );
+
+            if (countedTrophyKeys.has(trophyKey)) {
+              return;
+            }
+
+            countedTrophyKeys.add(trophyKey);
+            autoCounts = incrementCounts(autoCounts, trophy.grade);
+            changed = true;
+          });
+
+          titleSnapshots = {
+            ...titleSnapshots,
+            [title.npCommunicationId]: {
+              earnedTotal: title.earnedTotal,
+              lastUpdated: titleLastUpdated,
+            },
+          };
+          changed = true;
+        } catch (error) {
+          warnings.push(
+            `Earned session sync unavailable for ${title.titleName}: ${extractSyncErrorMessage(error)}`,
+          );
+        }
+      }
+
+      if (!changed) {
+        return {
+          card: this.stateStore.getEarnedSessionState(),
+          warnings,
+        };
+      }
+
+      return {
+        card: this.stateStore.saveEarnedSessionTracker({
+          ...tracker,
+          autoCounts,
+          countedTrophyKeys: Array.from(countedTrophyKeys),
+          titleSnapshots,
+        }),
+        warnings,
+      };
+    };
+
+    const resultPromise = this.earnedSessionSyncChain.then(run, run);
+    this.earnedSessionSyncChain = resultPromise.then(
+      () => undefined,
+      () => undefined,
+    );
+
+    return resultPromise;
   }
 }
 
@@ -391,6 +559,57 @@ const emptyCounts = (): TrophyCountsSummary => ({
   bronze: 0,
   total: 0,
 });
+
+const incrementCounts = (
+  counts: TrophyCountsSummary,
+  grade: GradeKey,
+): TrophyCountsSummary => ({
+  ...counts,
+  [grade]: counts[grade] + 1,
+  total: counts.total + 1,
+});
+
+const createEarnedSessionTrophyKey = (
+  npCommunicationId: string,
+  trophyId: number,
+  trophyGroupId: string,
+) => `${npCommunicationId}:${trophyGroupId}:${trophyId}`;
+
+const extractSyncErrorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : "Unable to load title trophies.";
+
+const buildUnearnedOverlayCard = (
+  profile: TrophySummaryResponse["profile"],
+  response: Awaited<ReturnType<PsnSummaryService["getUnearnedTrophies"]>> | null,
+): OverlayUnearnedCard | null => {
+  if (!profile && !response) {
+    return null;
+  }
+
+  const unearnedCounts = emptyCounts();
+  response?.trophies.forEach((trophy) => {
+    unearnedCounts[trophy.grade] += 1;
+    unearnedCounts.total += 1;
+  });
+
+  const totalEarnedCount = profile?.totalEarnedCount ?? 0;
+  const definedTotal = totalEarnedCount + unearnedCounts.total;
+
+  return {
+    onlineId: profile?.onlineId ?? null,
+    avatarUrl: profile?.avatarUrl ?? null,
+    completionPercentage:
+      definedTotal > 0 ? (totalEarnedCount / definedTotal) * 100 : null,
+    totalUnearnedCount: unearnedCounts.total,
+    unearnedCounts,
+  };
+};
+
+const resolveLatestTimestamp = (...timestamps: Array<string | null | undefined>) =>
+  timestamps
+    .filter((value): value is string => typeof value === "string" && value.length > 0)
+    .sort()
+    .at(-1) ?? new Date().toISOString();
 
 const hasOverride = (activeGame: ActiveGameSelection) =>
   hasCustomContent(activeGame) ||

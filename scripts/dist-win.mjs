@@ -1,4 +1,13 @@
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, parse, resolve } from "node:path";
 import { spawn } from "node:child_process";
@@ -8,10 +17,29 @@ const projectRoot = resolve(process.cwd());
 const supportedTargets = new Set(["nsis", "portable"]);
 const requestedTargets = process.argv.slice(2);
 const targets = requestedTargets.length > 0 ? requestedTargets : ["nsis", "portable"];
-const needsStage = /\s/.test(projectRoot);
 const stagingRoot = join(tmpdir(), "streamer-tools-win-build");
 const stagedProjectRoot = join(stagingRoot, "app");
 const releaseDirectoryName = "release";
+const packageJsonPath = join(projectRoot, "package.json");
+const packageMetadata = JSON.parse(readFileSync(packageJsonPath, "utf8"));
+const requestedPackageVersion = packageMetadata.version;
+
+const normalizePackageVersion = (version) => {
+  if (/^\d+$/.test(version)) {
+    return `${version}.0.0`;
+  }
+
+  if (/^\d+\.\d+$/.test(version)) {
+    return `${version}.0`;
+  }
+
+  return version;
+};
+
+const buildPackageVersion = normalizePackageVersion(requestedPackageVersion);
+const stageRequiredForPath = /\s/.test(projectRoot);
+const stageRequiredForVersion = buildPackageVersion !== requestedPackageVersion;
+const needsStage = stageRequiredForPath || stageRequiredForVersion;
 
 for (const target of targets) {
   if (!supportedTargets.has(target)) {
@@ -129,6 +157,25 @@ const stageProject = () => {
     }
   }
 
+  if (stageRequiredForVersion) {
+    const stagedPackageJsonPath = join(stagedProjectRoot, "package.json");
+    const stagedPackageLockPath = join(stagedProjectRoot, "package-lock.json");
+    const stagedPackageMetadata = JSON.parse(readFileSync(stagedPackageJsonPath, "utf8"));
+    stagedPackageMetadata.version = buildPackageVersion;
+    writeFileSync(stagedPackageJsonPath, `${JSON.stringify(stagedPackageMetadata, null, 2)}\n`);
+
+    if (existsSync(stagedPackageLockPath)) {
+      const stagedPackageLock = JSON.parse(readFileSync(stagedPackageLockPath, "utf8"));
+      stagedPackageLock.version = buildPackageVersion;
+
+      if (stagedPackageLock.packages?.[""]) {
+        stagedPackageLock.packages[""].version = buildPackageVersion;
+      }
+
+      writeFileSync(stagedPackageLockPath, `${JSON.stringify(stagedPackageLock, null, 2)}\n`);
+    }
+  }
+
   return stagedProjectRoot;
 };
 
@@ -145,7 +192,11 @@ const copyReleaseArtifactsBack = async (packagingRoot) => {
 
   for (const entry of readdirSync(stagedReleaseRoot)) {
     const source = join(stagedReleaseRoot, entry);
-    const destination = join(releaseRoot, entry);
+    const releaseEntryName =
+      stageRequiredForVersion && entry.includes(buildPackageVersion)
+        ? entry.replace(buildPackageVersion, requestedPackageVersion)
+        : entry;
+    const destination = join(releaseRoot, releaseEntryName);
     await copyPathWithFallback(source, destination);
   }
 };
@@ -165,7 +216,19 @@ const cleanupStage = () => {
 const packagingRoot = needsStage ? stageProject() : projectRoot;
 
 if (needsStage) {
-  console.log(`Packaging through ${packagingRoot} to avoid native rebuild failures from spaced paths.`);
+  const stageReasons = [];
+
+  if (stageRequiredForPath) {
+    stageReasons.push("avoid native rebuild failures from spaced paths");
+  }
+
+  if (stageRequiredForVersion) {
+    stageReasons.push(
+      `normalize package version ${requestedPackageVersion} to ${buildPackageVersion} for electron-builder`,
+    );
+  }
+
+  console.log(`Packaging through ${packagingRoot} to ${stageReasons.join(" and ")}.`);
 }
 
 try {

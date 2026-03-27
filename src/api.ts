@@ -1,7 +1,9 @@
 import type {
   ActiveGameSelection,
   HealthResponse,
+  OverlayBrbCard,
   OverlayDataResponse,
+  OverlayEarnedSessionCard,
   OverlaySettings,
   PsnTokenStatusResponse,
   TargetTrophySelection,
@@ -9,6 +11,8 @@ import type {
   TitleTrophiesResponse,
   UnearnedTrophiesResponse,
   TrophySummaryResponse,
+  UpdateBrbRequest,
+  UpdateEarnedSessionRequest,
   UpdatePsnTokenRequest,
   UpdateTargetTrophyRequest,
 } from "../shared/contracts.js";
@@ -67,6 +71,16 @@ export const api = {
     requestJson<ActiveGameSelection>("/api/active-game", {
       method: "PUT",
       body: JSON.stringify(activeGame),
+    }),
+  updateBrb: (request: UpdateBrbRequest) =>
+    requestJson<OverlayBrbCard>("/api/brb", {
+      method: "PUT",
+      body: JSON.stringify(request),
+    }),
+  updateEarnedSession: (request: UpdateEarnedSessionRequest) =>
+    requestJson<OverlayEarnedSessionCard>("/api/earned-session", {
+      method: "PUT",
+      body: JSON.stringify(request),
     }),
   getOverlayData: () => requestJson<OverlayDataResponse>("/api/overlay-data"),
 };

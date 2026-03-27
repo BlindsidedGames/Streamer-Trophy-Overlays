@@ -2,13 +2,11 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 import express, { type Express } from "express";
+import { overlayRoutePaths } from "../shared/contracts.js";
 
 const dashboardRoutes = [
   "/",
-  "/overlay/loop",
-  "/overlay/overall",
-  "/overlay/current-game",
-  "/overlay/target-trophy",
+  ...Object.values(overlayRoutePaths),
 ];
 
 export interface HostedUiPaths {

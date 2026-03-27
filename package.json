@@ -1,6 +1,6 @@
 {
   "name": "streamer-tools",
-  "version": "0.1.0",
+  "version": "4.0.0",
   "description": "Local PSN trophy lookup test app for streamer overlays.",
   "main": "build/electron/main.js",
   "scripts": {
@@ -23,7 +23,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "type": "module",
   "dependencies": {
     "better-sqlite3": "^12.8.0",

@@ -10,10 +10,14 @@ import {
 
 import type {
   ActiveGameSelection,
+  GradeKey,
   OverlayAnchor,
+  OverlayBrbCard,
   OverlayDataResponse,
+  OverlayEarnedSessionCard,
   OverlayRouteKey,
   OverlaySettings,
+  OverlayView,
   PsnTokenStatusResponse,
   TargetTrophySelection,
   TitleSearchResponse,
@@ -24,20 +28,31 @@ import type {
   TrophySummaryResponse,
   UnearnedTrophiesResponse,
   UnearnedTrophyItem,
+  UpdateBrbRequest,
+  UpdateEarnedSessionRequest,
   UpdateTargetTrophyRequest,
 } from "../shared/contracts.js";
 import {
+  createDefaultBrbState,
   createDefaultActiveGameSelection,
+  createDefaultEarnedSessionCard,
   createDefaultOverlaySettings,
   overlayAnchorOptions,
+  overlayRoutePaths,
 } from "../shared/contracts.js";
 import { api } from "./api.js";
 import {
+  BeRightBackOverlay,
+  CameraBorderOverlay,
+  CAMERA_BORDER_PREVIEW_VIEWPORT_HEIGHT,
+  CAMERA_BORDER_PREVIEW_VIEWPORT_WIDTH,
   CurrentGameOverlay,
+  EarnedSessionOverlay,
   EmbeddedOverlayPreview,
   LoopOverlay,
   OverallOverlay,
   TargetTrophyOverlay,
+  UnearnedTrophiesOverlay,
 } from "./components.js";
 
 type ConnectionState = "loading" | "ready" | "error";
@@ -69,6 +84,7 @@ const trophyBrowserGradeIcon: Record<TrophyBrowserItem["grade"], string> = {
   silver: "/img/40-silver.png",
   bronze: "/img/40-bronze.png",
 };
+const routeControlGradeOrder: GradeKey[] = ["platinum", "gold", "silver", "bronze"];
 
 const defaultSummary: TrophySummaryResponse = {
   profile: null,
@@ -84,8 +100,11 @@ const defaultSummary: TrophySummaryResponse = {
 
 const defaultOverlayData: OverlayDataResponse = {
   overall: null,
+  unearnedTrophies: null,
   currentGame: null,
   targetTrophy: null,
+  brb: createDefaultBrbState(),
+  earnedSession: createDefaultEarnedSessionCard(),
   display: {
     settings: createDefaultOverlaySettings(),
     loopOrder: ["overall", "currentGame"],
@@ -149,58 +168,114 @@ const unearnedSortOptions: Array<{ value: UnearnedSortMode; label: string }> = [
 ];
 const stripZoneLabels: Record<StripZoneKey, string> = {
   artwork: "Artwork",
-  identity: "Title and platform",
-  metrics: "Progress and earned totals",
-  trophies: "Trophy counts",
+  identity: "Identity",
+  metrics: "Progress",
+  trophies: "Trophies",
   targetInfo: "Target info",
 };
+const loopToggleLabels: Record<keyof OverlaySettings["loopVisibility"], string> = {
+  overall: "Overall",
+  unearnedTrophies: "Unearned",
+  currentGame: "Current game",
+  targetTrophy: "Target trophy",
+};
+const stripToggleLabels: Record<
+  keyof OverlaySettings["stripVisibility"]["overall"],
+  string
+> = {
+  artwork: "Artwork",
+  identity: "Identity",
+  metrics: "Progress",
+  trophies: "Trophies",
+};
+const unearnedDetailedProgressToggleLabel = "Detailed progress";
 const overlayAnchorLabels: Record<OverlayAnchor, string> = {
   "top-left": "Top-left",
+  "top-center": "Top-center",
   "top-right": "Top-right",
   "bottom-left": "Bottom-left",
+  "bottom-center": "Bottom-center",
   "bottom-right": "Bottom-right",
 };
-const overlayRoutePreviewConfigs = [
+type OverlayRoutePreviewConfig = {
+  key: OverlayRouteKey;
+  routeLabel: string;
+  copyLabel: string;
+  urlPath: string;
+  previewTitle: string;
+  viewportWidth?: number;
+  viewportHeight: number;
+  anchored?: boolean;
+};
+
+const overlayRoutePreviewConfigs: ReadonlyArray<OverlayRoutePreviewConfig> = [
   {
     key: "loop",
     routeLabel: "Loop",
     copyLabel: "Copy loop URL",
-    urlPath: "/overlay/loop",
+    urlPath: overlayRoutePaths.loop,
     previewTitle: "Loop preview",
-    viewportHeight: 220,
-  },
-  {
-    key: "targetTrophy",
-    routeLabel: "Target trophy",
-    copyLabel: "Copy target trophy URL",
-    urlPath: "/overlay/target-trophy",
-    previewTitle: "Target trophy preview",
     viewportHeight: 220,
   },
   {
     key: "overall",
     routeLabel: "Overall",
     copyLabel: "Copy overall URL",
-    urlPath: "/overlay/overall",
+    urlPath: overlayRoutePaths.overall,
     previewTitle: "Overall preview",
+    viewportHeight: 220,
+  },
+  {
+    key: "unearnedTrophies",
+    routeLabel: "Unearned trophies",
+    copyLabel: "Copy unearned trophies URL",
+    urlPath: overlayRoutePaths.unearnedTrophies,
+    previewTitle: "Unearned trophies preview",
     viewportHeight: 220,
   },
   {
     key: "currentGame",
     routeLabel: "Current game",
     copyLabel: "Copy current game URL",
-    urlPath: "/overlay/current-game",
+    urlPath: overlayRoutePaths.currentGame,
     previewTitle: "Current game preview",
     viewportHeight: 220,
   },
-] as const satisfies ReadonlyArray<{
-  key: OverlayRouteKey;
-  routeLabel: string;
-  copyLabel: string;
-  urlPath: string;
-  previewTitle: string;
-  viewportHeight: number;
-}>;
+  {
+    key: "targetTrophy",
+    routeLabel: "Target trophy",
+    copyLabel: "Copy target trophy URL",
+    urlPath: overlayRoutePaths.targetTrophy,
+    previewTitle: "Target trophy preview",
+    viewportHeight: 220,
+  },
+  {
+    key: "brb",
+    routeLabel: "Be right back",
+    copyLabel: "Copy BRB URL",
+    urlPath: overlayRoutePaths.brb,
+    previewTitle: "Be right back preview",
+    viewportHeight: 220,
+  },
+  {
+    key: "earnedSession",
+    routeLabel: "Earned this session",
+    copyLabel: "Copy earned session URL",
+    urlPath: overlayRoutePaths.earnedSession,
+    previewTitle: "Earned this session preview",
+    viewportHeight: 220,
+  },
+  {
+    key: "cameraBorder",
+    routeLabel: "Camera border",
+    copyLabel: "Copy camera border URL",
+    urlPath: overlayRoutePaths.cameraBorder,
+    previewTitle: "Camera border preview",
+    viewportWidth: CAMERA_BORDER_PREVIEW_VIEWPORT_WIDTH,
+    viewportHeight: CAMERA_BORDER_PREVIEW_VIEWPORT_HEIGHT,
+    anchored: false,
+  },
+] as const;
 
 const copyText = async (value: string) => {
   try {
@@ -426,22 +501,38 @@ const resolveStripDropIndex = (
 
 const isStripZoneVisible = (settings: OverlaySettings, zone: StripZoneKey) => {
   if (zone === "artwork") {
-    return settings.showStripArtwork;
+    return (
+      settings.stripVisibility.overall.artwork ||
+      settings.stripVisibility.currentGame.artwork ||
+      settings.showTargetTrophyArtwork
+    );
   }
 
   if (zone === "identity") {
-    return settings.showStripIdentity;
+    return (
+      settings.stripVisibility.overall.identity ||
+      settings.stripVisibility.currentGame.identity ||
+      settings.stripVisibility.unearnedTrophies.identity
+    );
   }
 
   if (zone === "metrics") {
-    return settings.showStripMetrics;
+    return (
+      settings.stripVisibility.overall.metrics ||
+      settings.stripVisibility.currentGame.metrics ||
+      settings.stripVisibility.unearnedTrophies.metrics
+    );
   }
 
   if (zone === "targetInfo") {
     return settings.showTargetTrophyInfo;
   }
 
-  return settings.showStripTrophies;
+  return (
+    settings.stripVisibility.overall.trophies ||
+    settings.stripVisibility.currentGame.trophies ||
+    settings.stripVisibility.unearnedTrophies.trophies
+  );
 };
 
 export function App() {
@@ -452,20 +543,36 @@ export function App() {
     return () => document.body.classList.remove("overlay-body");
   }, [path]);
 
-  if (path === "/overlay/loop") {
+  if (path === overlayRoutePaths.loop) {
     return <LoopOverlay />;
   }
 
-  if (path === "/overlay/overall") {
+  if (path === overlayRoutePaths.overall) {
     return <OverallOverlay />;
   }
 
-  if (path === "/overlay/current-game") {
+  if (path === overlayRoutePaths.currentGame) {
     return <CurrentGameOverlay />;
   }
 
-  if (path === "/overlay/target-trophy") {
+  if (path === overlayRoutePaths.unearnedTrophies) {
+    return <UnearnedTrophiesOverlay />;
+  }
+
+  if (path === overlayRoutePaths.targetTrophy) {
     return <TargetTrophyOverlay />;
+  }
+
+  if (path === overlayRoutePaths.brb) {
+    return <BeRightBackOverlay />;
+  }
+
+  if (path === overlayRoutePaths.earnedSession) {
+    return <EarnedSessionOverlay />;
+  }
+
+  if (path === overlayRoutePaths.cameraBorder) {
+    return <CameraBorderOverlay />;
   }
 
   return <DashboardApp />;
@@ -521,6 +628,8 @@ function DashboardApp() {
   const [draggedStripZone, setDraggedStripZone] = useState<StripZoneKey | null>(null);
   const [dropStripIndex, setDropStripIndex] = useState<number | null>(null);
   const [copiedRouteKey, setCopiedRouteKey] = useState<OverlayRouteKey | null>(null);
+  const [brbActionPending, setBrbActionPending] = useState(false);
+  const [earnedSessionActionPending, setEarnedSessionActionPending] = useState(false);
   const settingsRef = useRef(settings);
   const pendingSettingsSaveTimeoutRef = useRef<number | null>(null);
   const settingsEditVersionRef = useRef(0);
@@ -1193,6 +1302,16 @@ function DashboardApp() {
     }
   };
 
+  const flushPendingSettingsSave = async () => {
+    if (pendingSettingsSaveTimeoutRef.current == null) {
+      return;
+    }
+
+    const editVersion = settingsEditVersionRef.current;
+    clearPendingSettingsSave();
+    await persistSettings(settingsRef.current, editVersion);
+  };
+
   const persistSettings = async (
     nextSettings: OverlaySettings,
     editVersion: number,
@@ -1282,6 +1401,841 @@ function DashboardApp() {
       setCopiedRouteKey((current) => (current === routeKey ? null : current));
       copiedRouteResetTimeoutRef.current = null;
     }, ROUTE_COPY_FEEDBACK_MS);
+  };
+
+  const applyBrbState = (nextBrb: OverlayBrbCard) => {
+    setOverlayData((current) => ({
+      ...current,
+      brb: nextBrb,
+      display: {
+        ...current.display,
+        settings: settingsRef.current,
+      },
+    }));
+  };
+
+  const runBrbAction = async (request: UpdateBrbRequest, pendingLabel: string, successLabel: string) => {
+    setBrbActionPending(true);
+
+    try {
+      await flushPendingSettingsSave();
+      setStatusMessage(pendingLabel);
+      const nextBrb = await api.updateBrb(request);
+      applyBrbState(nextBrb);
+      setStatusMessage(successLabel);
+    } catch (error) {
+      const nextPsnAccessIssue = resolvePsnAccessIssue(error);
+      setPsnAccessIssue(nextPsnAccessIssue);
+      if (nextPsnAccessIssue) {
+        setPsnAccessOpen(true);
+      }
+      setStatusMessage("BRB update failed");
+      setDebugPayload(error);
+    } finally {
+      setBrbActionPending(false);
+    }
+  };
+
+  const applyEarnedSessionState = (nextEarnedSession: OverlayEarnedSessionCard) => {
+    setOverlayData((current) => ({
+      ...current,
+      earnedSession: nextEarnedSession,
+      display: {
+        ...current.display,
+        settings: settingsRef.current,
+      },
+    }));
+  };
+
+  const runEarnedSessionAction = async (
+    request: UpdateEarnedSessionRequest,
+    pendingLabel: string,
+    successLabel: string,
+  ) => {
+    setEarnedSessionActionPending(true);
+
+    try {
+      await flushPendingSettingsSave();
+      setStatusMessage(pendingLabel);
+      const nextEarnedSession = await api.updateEarnedSession(request);
+      applyEarnedSessionState(nextEarnedSession);
+      setStatusMessage(successLabel);
+    } catch (error) {
+      const nextPsnAccessIssue = resolvePsnAccessIssue(error);
+      setPsnAccessIssue(nextPsnAccessIssue);
+      if (nextPsnAccessIssue) {
+        setPsnAccessOpen(true);
+      }
+      setStatusMessage("Earned session update failed");
+      setDebugPayload(error);
+    } finally {
+      setEarnedSessionActionPending(false);
+    }
+  };
+
+  const setLoopVisibility = (
+    view: keyof OverlaySettings["loopVisibility"],
+    nextValue: boolean,
+  ) => {
+    updateSettingsWithPersistence((current) => {
+      if (current.loopVisibility[view] === nextValue) {
+        return current;
+      }
+
+      return {
+        ...current,
+        loopVisibility: {
+          ...current.loopVisibility,
+          [view]: nextValue,
+        },
+      };
+    }, "immediate");
+  };
+
+  const setStripVisibility = (
+    view: keyof OverlaySettings["stripVisibility"],
+    section: keyof OverlaySettings["stripVisibility"]["overall"],
+    nextValue: boolean,
+  ) => {
+    updateSettingsWithPersistence((current) => {
+      if (view === "unearnedTrophies" && section === "artwork") {
+        return current;
+      }
+
+      if (current.stripVisibility[view][section] === nextValue) {
+        return current;
+      }
+
+      return {
+        ...current,
+        stripVisibility: {
+          ...current.stripVisibility,
+          [view]: {
+            ...current.stripVisibility[view],
+            [section]: nextValue,
+          },
+        },
+      };
+    }, "immediate");
+  };
+
+  const setDurationSetting = (
+    key:
+      | "overallDurationMs"
+      | "unearnedTrophiesDurationMs"
+      | "currentGameDurationMs"
+      | "targetTrophyDurationMs"
+      | "brbDurationMs",
+    nextValue: number | null,
+  ) => {
+    updateSettingsWithPersistence((current) => {
+      const resolvedValue = nextValue ?? current[key];
+
+      return resolvedValue === current[key]
+        ? current
+        : {
+            ...current,
+            [key]: resolvedValue,
+          };
+    }, "debounced");
+  };
+
+  const setUnearnedDetailedProgressVisibility = (nextValue: boolean) => {
+    updateSettingsWithPersistence((current) => {
+      if (current.showUnearnedDetailedProgress === nextValue) {
+        return current;
+      }
+
+      return {
+        ...current,
+        showUnearnedDetailedProgress: nextValue,
+      };
+    }, "immediate");
+  };
+
+  const setCameraBorderSetting = (
+    key: keyof OverlaySettings["cameraBorder"],
+    nextValue: number | null,
+  ) => {
+    updateSettingsWithPersistence((current) => {
+      const resolvedValue = nextValue ?? current.cameraBorder[key];
+
+      return resolvedValue === current.cameraBorder[key]
+        ? current
+        : {
+            ...current,
+            cameraBorder: {
+              ...current.cameraBorder,
+              [key]: resolvedValue,
+            },
+      };
+    }, "debounced");
+  };
+
+  const setOverlayBackgroundTransparency = (
+    key: keyof OverlaySettings["overlayAppearance"],
+    nextValue: number | null,
+  ) => {
+    updateSettingsWithPersistence((current) => {
+      const resolvedValue =
+        nextValue ?? current.overlayAppearance[key].backgroundTransparencyPercent;
+
+      return resolvedValue === current.overlayAppearance[key].backgroundTransparencyPercent
+        ? current
+        : {
+            ...current,
+            overlayAppearance: {
+              ...current.overlayAppearance,
+              [key]: {
+                ...current.overlayAppearance[key],
+                backgroundTransparencyPercent: resolvedValue,
+              },
+            },
+          };
+    }, "debounced");
+  };
+
+  const setOverlayArtworkRadius = (
+    key: "overall" | "currentGame" | "targetTrophy" | "brb",
+    nextValue: number | null,
+  ) => {
+    updateSettingsWithPersistence((current) => {
+      const resolvedValue = nextValue ?? current.overlayAppearance[key].artworkRadiusPx;
+
+      return resolvedValue === current.overlayAppearance[key].artworkRadiusPx
+        ? current
+        : {
+            ...current,
+            overlayAppearance: {
+              ...current.overlayAppearance,
+              [key]: {
+                ...current.overlayAppearance[key],
+                artworkRadiusPx: resolvedValue,
+              },
+            },
+          };
+    }, "debounced");
+  };
+
+  const loopToggleOrder: Array<keyof OverlaySettings["loopVisibility"]> = [
+    "overall",
+    "unearnedTrophies",
+    "currentGame",
+    "targetTrophy",
+  ];
+  const brbState = overlayData.brb;
+  const earnedSessionState = overlayData.earnedSession;
+
+  const renderRouteControls = (routeKey: OverlayRouteKey) => {
+    if (routeKey === "loop") {
+      return (
+        <RouteToggleGroup
+          routeLabel="Loop"
+          toggles={loopToggleOrder.map((view) => ({
+            label: loopToggleLabels[view],
+            pressed: settings.loopVisibility[view],
+            onToggle: () => setLoopVisibility(view, !settings.loopVisibility[view]),
+          }))}
+        />
+      );
+    }
+
+    if (routeKey === "overall") {
+      return (
+        <>
+          <RouteToggleGroup
+            routeLabel="Overall"
+            toggles={[
+              {
+                label: stripToggleLabels.artwork,
+                pressed: settings.stripVisibility.overall.artwork,
+                onToggle: () =>
+                  setStripVisibility(
+                    "overall",
+                    "artwork",
+                    !settings.stripVisibility.overall.artwork,
+                  ),
+              },
+              {
+                label: stripToggleLabels.identity,
+                pressed: settings.stripVisibility.overall.identity,
+                onToggle: () =>
+                  setStripVisibility(
+                    "overall",
+                    "identity",
+                    !settings.stripVisibility.overall.identity,
+                  ),
+              },
+              {
+                label: stripToggleLabels.metrics,
+                pressed: settings.stripVisibility.overall.metrics,
+                onToggle: () =>
+                  setStripVisibility(
+                    "overall",
+                    "metrics",
+                    !settings.stripVisibility.overall.metrics,
+                  ),
+              },
+              {
+                label: stripToggleLabels.trophies,
+                pressed: settings.stripVisibility.overall.trophies,
+                onToggle: () =>
+                  setStripVisibility(
+                    "overall",
+                    "trophies",
+                    !settings.stripVisibility.overall.trophies,
+                  ),
+              },
+            ]}
+          />
+          <InlineNumberField
+            ariaLabel="Overall duration"
+            label="Duration"
+            value={settings.overallDurationMs}
+            onChange={(value) => setDurationSetting("overallDurationMs", value)}
+          />
+          <InlineNumberField
+            ariaLabel="Overall opacity"
+            label="Opacity"
+            value={settings.overlayAppearance.overall.backgroundTransparencyPercent}
+            min={0}
+            max={100}
+            step={1}
+            onChange={(value) => setOverlayBackgroundTransparency("overall", value)}
+          />
+          <InlineNumberField
+            ariaLabel="Overall artwork radius"
+            label="Artwork radius"
+            value={settings.overlayAppearance.overall.artworkRadiusPx}
+            min={0}
+            max={100}
+            step={1}
+            onChange={(value) => setOverlayArtworkRadius("overall", value)}
+          />
+        </>
+      );
+    }
+
+    if (routeKey === "unearnedTrophies") {
+      return (
+        <>
+          <RouteToggleGroup
+            routeLabel="Unearned trophies"
+            toggles={[
+              {
+                label: stripToggleLabels.identity,
+                pressed: settings.stripVisibility.unearnedTrophies.identity,
+                onToggle: () =>
+                  setStripVisibility(
+                    "unearnedTrophies",
+                    "identity",
+                    !settings.stripVisibility.unearnedTrophies.identity,
+                  ),
+              },
+              {
+                label: stripToggleLabels.metrics,
+                pressed: settings.stripVisibility.unearnedTrophies.metrics,
+                onToggle: () =>
+                  setStripVisibility(
+                    "unearnedTrophies",
+                    "metrics",
+                    !settings.stripVisibility.unearnedTrophies.metrics,
+                  ),
+              },
+              {
+                label: unearnedDetailedProgressToggleLabel,
+                pressed: settings.showUnearnedDetailedProgress,
+                onToggle: () =>
+                  setUnearnedDetailedProgressVisibility(
+                    !settings.showUnearnedDetailedProgress,
+                  ),
+              },
+              {
+                label: stripToggleLabels.trophies,
+                pressed: settings.stripVisibility.unearnedTrophies.trophies,
+                onToggle: () =>
+                  setStripVisibility(
+                    "unearnedTrophies",
+                    "trophies",
+                    !settings.stripVisibility.unearnedTrophies.trophies,
+                  ),
+              },
+            ]}
+          />
+          <InlineTextField
+            ariaLabel="Unearned trophies label text"
+            hideLabel
+            placeholder="Unearned"
+            value={settings.unearnedTrophiesLabelText}
+            onChange={(value) =>
+              updateSettingsWithPersistence((current) =>
+                value === current.unearnedTrophiesLabelText
+                  ? current
+                  : {
+                      ...current,
+                      unearnedTrophiesLabelText: value,
+                    }, "debounced")
+            }
+          />
+          <InlineNumberField
+            ariaLabel="Unearned trophies duration"
+            label="Duration"
+            value={settings.unearnedTrophiesDurationMs}
+            onChange={(value) => setDurationSetting("unearnedTrophiesDurationMs", value)}
+          />
+          <InlineNumberField
+            ariaLabel="Unearned trophies opacity"
+            label="Opacity"
+            value={settings.overlayAppearance.unearnedTrophies.backgroundTransparencyPercent}
+            min={0}
+            max={100}
+            step={1}
+            onChange={(value) =>
+              setOverlayBackgroundTransparency("unearnedTrophies", value)}
+          />
+        </>
+      );
+    }
+
+    if (routeKey === "currentGame") {
+      return (
+        <>
+          <RouteToggleGroup
+            routeLabel="Current game"
+            toggles={[
+              {
+                label: stripToggleLabels.artwork,
+                pressed: settings.stripVisibility.currentGame.artwork,
+                onToggle: () =>
+                  setStripVisibility(
+                    "currentGame",
+                    "artwork",
+                    !settings.stripVisibility.currentGame.artwork,
+                  ),
+              },
+              {
+                label: stripToggleLabels.identity,
+                pressed: settings.stripVisibility.currentGame.identity,
+                onToggle: () =>
+                  setStripVisibility(
+                    "currentGame",
+                    "identity",
+                    !settings.stripVisibility.currentGame.identity,
+                  ),
+              },
+              {
+                label: stripToggleLabels.metrics,
+                pressed: settings.stripVisibility.currentGame.metrics,
+                onToggle: () =>
+                  setStripVisibility(
+                    "currentGame",
+                    "metrics",
+                    !settings.stripVisibility.currentGame.metrics,
+                  ),
+              },
+              {
+                label: stripToggleLabels.trophies,
+                pressed: settings.stripVisibility.currentGame.trophies,
+                onToggle: () =>
+                  setStripVisibility(
+                    "currentGame",
+                    "trophies",
+                    !settings.stripVisibility.currentGame.trophies,
+                  ),
+              },
+            ]}
+          />
+          <InlineNumberField
+            ariaLabel="Current game duration"
+            label="Duration"
+            value={settings.currentGameDurationMs}
+            onChange={(value) => setDurationSetting("currentGameDurationMs", value)}
+          />
+          <InlineNumberField
+            ariaLabel="Current game opacity"
+            label="Opacity"
+            value={settings.overlayAppearance.currentGame.backgroundTransparencyPercent}
+            min={0}
+            max={100}
+            step={1}
+            onChange={(value) => setOverlayBackgroundTransparency("currentGame", value)}
+          />
+          <InlineNumberField
+            ariaLabel="Current game artwork radius"
+            label="Artwork radius"
+            value={settings.overlayAppearance.currentGame.artworkRadiusPx}
+            min={0}
+            max={100}
+            step={1}
+            onChange={(value) => setOverlayArtworkRadius("currentGame", value)}
+          />
+        </>
+      );
+    }
+
+    if (routeKey === "targetTrophy") {
+      return (
+        <>
+          <RouteToggleGroup
+            routeLabel="Target trophy"
+            toggles={[
+              {
+                label: "Artwork",
+                pressed: settings.showTargetTrophyArtwork,
+                onToggle: () =>
+                  updateSettingsWithPersistence((current) =>
+                    ({
+                      ...current,
+                      showTargetTrophyArtwork: !current.showTargetTrophyArtwork,
+                    }), "immediate"),
+              },
+              {
+                label: "Tag",
+                pressed: settings.showTargetTrophyTag,
+                onToggle: () =>
+                  updateSettingsWithPersistence((current) =>
+                    ({
+                      ...current,
+                      showTargetTrophyTag: !current.showTargetTrophyTag,
+                    }), "immediate"),
+              },
+              {
+                label: "Info",
+                pressed: settings.showTargetTrophyInfo,
+                onToggle: () =>
+                  updateSettingsWithPersistence((current) =>
+                    ({
+                      ...current,
+                      showTargetTrophyInfo: !current.showTargetTrophyInfo,
+                    }), "immediate"),
+              },
+            ]}
+          />
+          <InlineNumberField
+            ariaLabel="Target trophy duration"
+            label="Duration"
+            value={settings.targetTrophyDurationMs}
+            onChange={(value) => setDurationSetting("targetTrophyDurationMs", value)}
+          />
+          <InlineTextField
+            ariaLabel="Target trophy tag text"
+            hideLabel
+            placeholder="Current target"
+            value={settings.targetTrophyTagText}
+            onChange={(value) =>
+              updateSettingsWithPersistence((current) =>
+                value === current.targetTrophyTagText
+                  ? current
+                  : {
+                      ...current,
+                      targetTrophyTagText: value,
+                    }, "debounced")
+            }
+          />
+          <InlineNumberField
+            ariaLabel="Target trophy opacity"
+            label="Opacity"
+            value={settings.overlayAppearance.targetTrophy.backgroundTransparencyPercent}
+            min={0}
+            max={100}
+            step={1}
+            onChange={(value) => setOverlayBackgroundTransparency("targetTrophy", value)}
+          />
+          <InlineNumberField
+            ariaLabel="Target trophy artwork radius"
+            label="Artwork radius"
+            value={settings.overlayAppearance.targetTrophy.artworkRadiusPx}
+            min={0}
+            max={100}
+            step={1}
+            onChange={(value) => setOverlayArtworkRadius("targetTrophy", value)}
+          />
+        </>
+      );
+    }
+
+    if (routeKey === "brb") {
+      return (
+        <>
+          <RouteToggleGroup
+            routeLabel="Be right back"
+            toggles={[
+              {
+                label: "Artwork",
+                pressed: settings.showBrbArtwork,
+                onToggle: () =>
+                  updateSettingsWithPersistence((current) =>
+                    ({
+                      ...current,
+                      showBrbArtwork: !current.showBrbArtwork,
+                    }), "immediate"),
+              },
+              {
+                label: "Identity",
+                pressed: settings.showBrbIdentity,
+                onToggle: () =>
+                  updateSettingsWithPersistence((current) =>
+                    ({
+                      ...current,
+                      showBrbIdentity: !current.showBrbIdentity,
+                    }), "immediate"),
+              },
+              {
+                label: "Progress",
+                pressed: settings.showBrbProgress,
+                onToggle: () =>
+                  updateSettingsWithPersistence((current) =>
+                    ({
+                      ...current,
+                      showBrbProgress: !current.showBrbProgress,
+                    }), "immediate"),
+              },
+            ]}
+          />
+          <InlineSecondsField
+            ariaLabel="Be right back duration"
+            label="Duration"
+            valueMs={settings.brbDurationMs}
+            onChangeMs={(value) => setDurationSetting("brbDurationMs", value)}
+          />
+          <InlineTextField
+            ariaLabel="Be right back subtitle text"
+            hideLabel
+            placeholder="Intermission"
+            value={settings.brbSubtitleText}
+            onChange={(value) =>
+              updateSettingsWithPersistence((current) =>
+                value === current.brbSubtitleText
+                  ? current
+                  : {
+                      ...current,
+                      brbSubtitleText: value,
+                    }, "debounced")
+            }
+          />
+          <InlineNumberField
+            ariaLabel="Be right back opacity"
+            label="Opacity"
+            value={settings.overlayAppearance.brb.backgroundTransparencyPercent}
+            min={0}
+            max={100}
+            step={1}
+            onChange={(value) => setOverlayBackgroundTransparency("brb", value)}
+          />
+          <InlineNumberField
+            ariaLabel="Be right back artwork radius"
+            label="Artwork radius"
+            value={settings.overlayAppearance.brb.artworkRadiusPx}
+            min={0}
+            max={100}
+            step={1}
+            onChange={(value) => setOverlayArtworkRadius("brb", value)}
+          />
+          <ToggleChipButton
+            ariaLabel="Be right back Visible"
+            label="Visible"
+            pressed={brbState.visible}
+            disabled={brbActionPending || brbState.status === "stopped"}
+            onToggle={() =>
+              void runBrbAction(
+                {
+                  action: "setVisibility",
+                  visible: !brbState.visible,
+                },
+                brbState.visible ? "Hiding BRB overlay" : "Showing BRB overlay",
+                brbState.visible ? "BRB overlay hidden" : "BRB overlay visible",
+              )
+            }
+          />
+          <RouteActionGroup
+            actions={[
+              {
+                label: brbState.status === "paused" ? "Resume" : "Start",
+                disabled:
+                  brbActionPending ||
+                  (brbState.status !== "stopped" &&
+                    brbState.status !== "paused" &&
+                    brbState.status !== "expired"),
+                onClick: () =>
+                  void runBrbAction(
+                    {
+                      action: brbState.status === "paused" ? "resume" : "start",
+                    },
+                    brbState.status === "paused" ? "Resuming BRB countdown" : "Starting BRB countdown",
+                    brbState.status === "paused" ? "BRB countdown resumed" : "BRB countdown started",
+                  ),
+              },
+              {
+                label: "Pause",
+                disabled: brbActionPending || brbState.status !== "running",
+                onClick: () =>
+                  void runBrbAction(
+                    { action: "pause" },
+                    "Pausing BRB countdown",
+                    "BRB countdown paused",
+                  ),
+              },
+              {
+                label: "Stop",
+                disabled: brbActionPending || brbState.status === "stopped",
+                onClick: () =>
+                  void runBrbAction(
+                    { action: "stop" },
+                    "Stopping BRB countdown",
+                    "BRB countdown stopped",
+                  ),
+              },
+            ]}
+          />
+        </>
+      );
+    }
+
+    if (routeKey === "earnedSession") {
+      return (
+        <>
+          <RouteToggleGroup
+            routeLabel="Earned this session"
+            toggles={[
+              {
+                label: "Identity",
+                pressed: settings.showEarnedSessionIdentity,
+                onToggle: () =>
+                  updateSettingsWithPersistence((current) =>
+                    ({
+                      ...current,
+                      showEarnedSessionIdentity: !current.showEarnedSessionIdentity,
+                    }), "immediate"),
+              },
+              {
+                label: "Trophies",
+                pressed: settings.showEarnedSessionTrophies,
+                onToggle: () =>
+                  updateSettingsWithPersistence((current) =>
+                    ({
+                      ...current,
+                      showEarnedSessionTrophies: !current.showEarnedSessionTrophies,
+                    }), "immediate"),
+              },
+            ]}
+          />
+          <InlineTextField
+            ariaLabel="Earned this session heading text"
+            hideLabel
+            placeholder="Earned This Session"
+            value={settings.earnedSessionHeadingText}
+            onChange={(value) =>
+              updateSettingsWithPersistence((current) =>
+                value === current.earnedSessionHeadingText
+                  ? current
+                  : {
+                      ...current,
+                      earnedSessionHeadingText: value,
+                    }, "debounced")
+            }
+          />
+          <InlineNumberField
+            ariaLabel="Earned this session opacity"
+            label="Opacity"
+            value={settings.overlayAppearance.earnedSession.backgroundTransparencyPercent}
+            min={0}
+            max={100}
+            step={1}
+            onChange={(value) => setOverlayBackgroundTransparency("earnedSession", value)}
+          />
+          <InlineGradeIncrementField
+            label="Manually increment"
+            disabled={earnedSessionActionPending}
+            onIncrement={(grade) =>
+              void runEarnedSessionAction(
+                {
+                  action: "increment",
+                  grade,
+                },
+                `Adding ${grade} trophy to session`,
+                "Earned session updated",
+              )
+            }
+          />
+          <ToggleChipButton
+            ariaLabel="Earned this session Visible"
+            label="Visible"
+            pressed={earnedSessionState.visible}
+            disabled={earnedSessionActionPending}
+            onToggle={() =>
+              void runEarnedSessionAction(
+                {
+                  action: "setVisibility",
+                  visible: !earnedSessionState.visible,
+                },
+                earnedSessionState.visible
+                  ? "Hiding earned session overlay"
+                  : "Showing earned session overlay",
+                earnedSessionState.visible
+                  ? "Earned session overlay hidden"
+                  : "Earned session overlay visible",
+              )
+            }
+          />
+          <RouteActionGroup
+            actions={[
+              {
+                label: "Reset",
+                disabled: earnedSessionActionPending,
+                onClick: () =>
+                  void runEarnedSessionAction(
+                    { action: "reset" },
+                    "Resetting earned session",
+                    "Earned session reset",
+                  ),
+              },
+            ]}
+          />
+        </>
+      );
+    }
+
+    if (routeKey === "cameraBorder") {
+      return (
+        <>
+          <InlineNumberField
+            ariaLabel="Camera border inset"
+            label="Inset"
+            value={settings.cameraBorder.baseInsetPx}
+            onChange={(value) => setCameraBorderSetting("baseInsetPx", value)}
+          />
+          <InlineNumberField
+            ariaLabel="Camera border thickness"
+            label="Thickness"
+            value={settings.cameraBorder.baseThicknessPx}
+            onChange={(value) => setCameraBorderSetting("baseThicknessPx", value)}
+          />
+          <InlineNumberField
+            ariaLabel="Camera border radius"
+            label="Radius"
+            value={settings.cameraBorder.baseRadiusPx}
+            onChange={(value) => setCameraBorderSetting("baseRadiusPx", value)}
+          />
+          <InlineNumberField
+            ariaLabel="Camera border cutout radius"
+            label="Cutout radius"
+            value={settings.cameraBorder.baseCutoutRadiusPx}
+            onChange={(value) => setCameraBorderSetting("baseCutoutRadiusPx", value)}
+          />
+          <InlineNumberField
+            ariaLabel="Camera border opacity"
+            label="Opacity"
+            value={settings.cameraBorder.opacityPercent}
+            min={0}
+            max={100}
+            step={1}
+            onChange={(value) => setCameraBorderSetting("opacityPercent", value)}
+          />
+        </>
+      );
+    }
+
+    return null;
   };
 
   const selectTitle = async (title: { npCommunicationId: string; titleName: string }) => {
@@ -1638,163 +2592,6 @@ function DashboardApp() {
               </div>
 
               <div className="setup-controls-stack">
-                <div className="setup-config-rail">
-                  <div className="editor-grid setup-config-fields">
-                    <NumberField
-                      label="Overall duration (ms)"
-                      value={settings.overallDurationMs}
-                      onChange={(value) =>
-                        updateSettingsWithPersistence((current) => {
-                          const nextValue = value ?? current.overallDurationMs;
-                          return nextValue === current.overallDurationMs
-                            ? current
-                            : {
-                                ...current,
-                                overallDurationMs: nextValue,
-                              };
-                        }, "debounced")
-                      }
-                    />
-                    <NumberField
-                      label="Current game duration (ms)"
-                      value={settings.currentGameDurationMs}
-                      onChange={(value) =>
-                        updateSettingsWithPersistence((current) => {
-                          const nextValue = value ?? current.currentGameDurationMs;
-                          return nextValue === current.currentGameDurationMs
-                            ? current
-                            : {
-                                ...current,
-                                currentGameDurationMs: nextValue,
-                              };
-                        }, "debounced")
-                      }
-                    />
-                    <NumberField
-                      label="Target trophy duration (ms)"
-                      value={settings.targetTrophyDurationMs}
-                      onChange={(value) =>
-                        updateSettingsWithPersistence((current) => {
-                          const nextValue = value ?? current.targetTrophyDurationMs;
-                          return nextValue === current.targetTrophyDurationMs
-                            ? current
-                            : {
-                                ...current,
-                                targetTrophyDurationMs: nextValue,
-                              };
-                        }, "debounced")
-                      }
-                    />
-                    <TextField
-                      label="Target trophy tag text"
-                      value={settings.targetTrophyTagText}
-                      onChange={(value) =>
-                        updateSettingsWithPersistence((current) =>
-                          value === current.targetTrophyTagText
-                            ? current
-                            : {
-                                ...current,
-                                targetTrophyTagText: value,
-                              }, "debounced")
-                      }
-                    />
-                  </div>
-
-                  <div className="toggle-grid settings-toggle-grid">
-                    <ToggleField
-                      label="Show artwork"
-                      checked={settings.showStripArtwork}
-                      onChange={(checked) =>
-                        updateSettingsWithPersistence((current) =>
-                          checked === current.showStripArtwork
-                            ? current
-                            : {
-                                ...current,
-                                showStripArtwork: checked,
-                              }, "immediate")
-                      }
-                    />
-                    <ToggleField
-                      label="Show title and platform"
-                      checked={settings.showStripIdentity}
-                      onChange={(checked) =>
-                        updateSettingsWithPersistence((current) =>
-                          checked === current.showStripIdentity
-                            ? current
-                            : {
-                                ...current,
-                                showStripIdentity: checked,
-                              }, "immediate")
-                      }
-                    />
-                    <ToggleField
-                      label="Show progress and earned totals"
-                      checked={settings.showStripMetrics}
-                      onChange={(checked) =>
-                        updateSettingsWithPersistence((current) =>
-                          checked === current.showStripMetrics
-                            ? current
-                            : {
-                                ...current,
-                                showStripMetrics: checked,
-                              }, "immediate")
-                      }
-                    />
-                    <ToggleField
-                      label="Show trophy counts"
-                      checked={settings.showStripTrophies}
-                      onChange={(checked) =>
-                        updateSettingsWithPersistence((current) =>
-                          checked === current.showStripTrophies
-                            ? current
-                            : {
-                                ...current,
-                                showStripTrophies: checked,
-                              }, "immediate")
-                      }
-                    />
-                    <ToggleField
-                      label="Show target trophy in loop"
-                      checked={settings.showTargetTrophyInLoop}
-                      onChange={(checked) =>
-                        updateSettingsWithPersistence((current) =>
-                          checked === current.showTargetTrophyInLoop
-                            ? current
-                            : {
-                                ...current,
-                                showTargetTrophyInLoop: checked,
-                              }, "immediate")
-                      }
-                    />
-                    <ToggleField
-                      label="Show target trophy tag"
-                      checked={settings.showTargetTrophyTag}
-                      onChange={(checked) =>
-                        updateSettingsWithPersistence((current) =>
-                          checked === current.showTargetTrophyTag
-                            ? current
-                            : {
-                                ...current,
-                                showTargetTrophyTag: checked,
-                              }, "immediate")
-                      }
-                    />
-                    <ToggleField
-                      label="Show target info"
-                      checked={settings.showTargetTrophyInfo}
-                      onChange={(checked) =>
-                        updateSettingsWithPersistence((current) =>
-                          checked === current.showTargetTrophyInfo
-                            ? current
-                            : {
-                                ...current,
-                                showTargetTrophyInfo: checked,
-                              }, "immediate")
-                      }
-                    />
-                  </div>
-                </div>
-
                 <div className="strip-order-rail">
                   <div
                     className={`strip-order-track ${draggedStripZone ? "is-dragging" : ""} ${
@@ -1862,27 +2659,31 @@ function DashboardApp() {
 
               <div className="setup-preview-stack">
                 {overlayRoutePreviewConfigs.map((route) => {
+                  const anchored = route.anchored !== false;
+                  const anchorKey = route.key as keyof OverlaySettings["overlayAnchors"];
                   const url = `${overlayUrlBase}${route.urlPath}`;
 
                   return (
                     <div className="overlay-preview-block" key={route.key}>
                       <RouteRow
-                        anchor={settings.overlayAnchors[route.key]}
-                        anchorLabel={`${route.routeLabel} anchor`}
+                        anchor={anchored ? settings.overlayAnchors[anchorKey] : undefined}
+                        anchorLabel={anchored ? `${route.routeLabel} anchor` : undefined}
                         copied={copiedRouteKey === route.key}
                         copyLabel={route.copyLabel}
-                        onAnchorChange={(value) =>
-                          updateSettingsWithPersistence((current) =>
-                            value === current.overlayAnchors[route.key]
-                              ? current
-                              : {
-                                  ...current,
-                                  overlayAnchors: {
-                                    ...current.overlayAnchors,
-                                    [route.key]: value,
-                                  },
-                                }, "immediate")
-                        }
+                        controls={renderRouteControls(route.key)}
+                        onAnchorChange={anchored
+                          ? (value) =>
+                              updateSettingsWithPersistence((current) =>
+                                value === current.overlayAnchors[anchorKey]
+                                  ? current
+                                  : {
+                                      ...current,
+                                      overlayAnchors: {
+                                        ...current.overlayAnchors,
+                                        [anchorKey]: value,
+                                      },
+                                    }, "immediate")
+                          : undefined}
                         onCopy={() => void copyRouteUrl(route.key, url)}
                         url={url}
                       />
@@ -1891,6 +2692,7 @@ function DashboardApp() {
                         srcPath={route.urlPath}
                         overlayData={overlayData}
                         settings={settings}
+                        viewportWidth={route.viewportWidth}
                         viewportHeight={route.viewportHeight}
                       />
                     </div>
@@ -2918,44 +3720,182 @@ function RouteRow({
   anchorLabel,
   copied,
   copyLabel,
+  controls,
   onAnchorChange,
   onCopy,
   url,
 }: {
-  anchor: OverlayAnchor;
-  anchorLabel: string;
+  anchor?: OverlayAnchor;
+  anchorLabel?: string;
   copied: boolean;
   copyLabel: string;
-  onAnchorChange: (value: OverlayAnchor) => void;
+  controls?: ReactNode;
+  onAnchorChange?: (value: OverlayAnchor) => void;
   onCopy: () => void;
   url: string;
 }) {
   return (
     <div className="route-row">
-      <span className="route-row-text">{url}</span>
-      <div className="route-row-actions">
-        <button
-          type="button"
-          className="route-copy-button"
-          aria-label={copyLabel}
-          onClick={onCopy}
-        >
-          {copied ? "Copied" : "Copy"}
-        </button>
-        <div className="select-field-control route-anchor-control">
-          <select
-            className="route-anchor-select"
-            aria-label={anchorLabel}
-            value={anchor}
-            onChange={(event) => onAnchorChange(event.target.value as OverlayAnchor)}
+      <div className="route-url-bar">
+        <span className="route-row-text">{url}</span>
+        <div className="route-url-actions">
+          <button
+            type="button"
+            className="route-copy-button"
+            aria-label={copyLabel}
+            onClick={onCopy}
           >
-            {overlayAnchorOptions.map((option) => (
-              <option key={option} value={option}>
-                {overlayAnchorLabels[option]}
-              </option>
-            ))}
-          </select>
+            {copied ? "Copied" : "Copy"}
+          </button>
+          {anchor && anchorLabel && onAnchorChange ? (
+            <div className="select-field-control route-anchor-control">
+              <select
+                className="route-anchor-select"
+                aria-label={anchorLabel}
+                value={anchor}
+                onChange={(event) => onAnchorChange(event.target.value as OverlayAnchor)}
+              >
+                {overlayAnchorOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {overlayAnchorLabels[option]}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
         </div>
+      </div>
+      {controls ? <div className="route-settings-bar">{controls}</div> : null}
+    </div>
+  );
+}
+
+function InlineTextField({
+  ariaLabel,
+  hideLabel = false,
+  label = "",
+  placeholder,
+  value,
+  onChange,
+}: {
+  ariaLabel: string;
+  hideLabel?: boolean;
+  label?: string;
+  placeholder?: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label
+      className={`route-inline-field route-inline-field-text ${
+        hideLabel ? "route-inline-field-unlabeled" : ""
+      }`}
+    >
+      {!hideLabel ? <span>{label}</span> : null}
+      <input
+        aria-label={ariaLabel}
+        placeholder={placeholder}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
+  );
+}
+
+function InlineNumberField({
+  ariaLabel,
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  ariaLabel: string;
+  label: string;
+  value: number | null;
+  min?: number;
+  max?: number;
+  step?: number;
+  onChange: (value: number | null) => void;
+}) {
+  return (
+    <label className="route-inline-field route-inline-field-number">
+      <span>{label}</span>
+      <input
+        aria-label={ariaLabel}
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        value={value ?? ""}
+        onChange={(event) =>
+          onChange(event.target.value === "" ? null : Number(event.target.value))
+        }
+      />
+    </label>
+  );
+}
+
+function InlineSecondsField({
+  ariaLabel,
+  label,
+  valueMs,
+  onChangeMs,
+}: {
+  ariaLabel: string;
+  label: string;
+  valueMs: number | null;
+  onChangeMs: (value: number | null) => void;
+}) {
+  return (
+    <label className="route-inline-field route-inline-field-number">
+      <span>{label}</span>
+      <input
+        aria-label={ariaLabel}
+        type="number"
+        min="1"
+        step="1"
+        value={valueMs == null ? "" : Math.round(valueMs / 1000)}
+        onChange={(event) => {
+          if (event.target.value === "") {
+            onChangeMs(null);
+            return;
+          }
+
+          const nextValue = Number(event.target.value);
+          onChangeMs(Number.isFinite(nextValue) ? Math.round(nextValue * 1000) : null);
+        }}
+      />
+    </label>
+  );
+}
+
+function InlineGradeIncrementField({
+  label,
+  disabled = false,
+  onIncrement,
+}: {
+  label: string;
+  disabled?: boolean;
+  onIncrement: (grade: GradeKey) => void;
+}) {
+  return (
+    <div className="route-inline-field route-inline-field-grade-buttons">
+      <span>{label}</span>
+      <div className="route-grade-button-group">
+        {routeControlGradeOrder.map((grade) => (
+          <button
+            key={grade}
+            type="button"
+            className="route-grade-icon-button"
+            aria-label={`Add ${grade} trophy`}
+            disabled={disabled}
+            onClick={() => onIncrement(grade)}
+          >
+            <img src={trophyBrowserGradeIcon[grade]} alt="" />
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -3001,23 +3941,81 @@ function NumberField({
   );
 }
 
-function ToggleField({
+function ToggleChipButton({
+  ariaLabel,
   label,
-  checked,
-  onChange,
+  pressed,
+  disabled = false,
+  onToggle,
 }: {
+  ariaLabel?: string;
   label: string;
-  checked: boolean;
-  onChange: (checked: boolean) => void;
+  pressed: boolean;
+  disabled?: boolean;
+  onToggle: () => void;
 }) {
   return (
-    <label className="toggle-field">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-      />
-      <span>{label}</span>
-    </label>
+    <button
+      type="button"
+      className={`route-toggle-chip ${pressed ? "is-active" : ""}`}
+      aria-label={ariaLabel ?? label}
+      aria-pressed={pressed}
+      disabled={disabled}
+      onClick={onToggle}
+    >
+      {label}
+    </button>
+  );
+}
+
+function RouteToggleGroup({
+  routeLabel,
+  toggles,
+}: {
+  routeLabel: string;
+  toggles: Array<{
+    label: string;
+    pressed: boolean;
+    onToggle: () => void;
+  }>;
+}) {
+  return (
+    <div className="route-toggle-group">
+      {toggles.map((toggle) => (
+        <ToggleChipButton
+          key={`${routeLabel}-${toggle.label}`}
+          ariaLabel={`${routeLabel} ${toggle.label}`}
+          label={toggle.label}
+          pressed={toggle.pressed}
+          onToggle={toggle.onToggle}
+        />
+      ))}
+    </div>
+  );
+}
+
+function RouteActionGroup({
+  actions,
+}: {
+  actions: Array<{
+    label: string;
+    disabled?: boolean;
+    onClick: () => void;
+  }>;
+}) {
+  return (
+    <div className="route-action-group">
+      {actions.map((action) => (
+        <button
+          key={action.label}
+          type="button"
+          className="route-action-button"
+          disabled={action.disabled}
+          onClick={action.onClick}
+        >
+          {action.label}
+        </button>
+      ))}
+    </div>
   );
 }

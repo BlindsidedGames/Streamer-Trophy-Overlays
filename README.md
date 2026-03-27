@@ -5,7 +5,7 @@ PSN Trophy Overlay Suite is a Windows desktop streamer overlay app for PlayStati
 ## What the app does
 
 - loads live PlayStation trophy totals and recent-title data
-- serves four local OBS browser-source overlays for loop, overall, current-game, and target-trophy views
+- serves local OBS browser-source overlays for loop, overall, unearned, current-game, target-trophy, BRB, and camera-border views
 - stores overlay settings and active-game overrides in a local SQLite database
 - lets you switch between PSN title data and custom current-game overrides without leaving the desktop app
 
@@ -66,8 +66,11 @@ After the app is running, OBS can use:
 - `http://127.0.0.1:4318/`
 - `http://127.0.0.1:4318/overlay/loop`
 - `http://127.0.0.1:4318/overlay/overall`
+- `http://127.0.0.1:4318/overlay/unearned-trophies`
 - `http://127.0.0.1:4318/overlay/current-game`
 - `http://127.0.0.1:4318/overlay/target-trophy`
+- `http://127.0.0.1:4318/overlay/brb`
+- `http://127.0.0.1:4318/overlay/camera-border`
 
 Closing the main window asks whether to minimize the app to the tray or quit it. Choosing tray mode keeps the local overlay URLs live while the window is hidden.
 
@@ -117,8 +120,11 @@ The same local server now hosts:
 - Dashboard: `http://127.0.0.1:4318/`
 - Loop overlay: `http://127.0.0.1:4318/overlay/loop`
 - Overall overlay: `http://127.0.0.1:4318/overlay/overall`
+- Unearned trophies overlay: `http://127.0.0.1:4318/overlay/unearned-trophies`
 - Current-game overlay: `http://127.0.0.1:4318/overlay/current-game`
 - Target trophy overlay: `http://127.0.0.1:4318/overlay/target-trophy`
+- BRB overlay: `http://127.0.0.1:4318/overlay/brb`
+- Camera border overlay: `http://127.0.0.1:4318/overlay/camera-border`
 
 ### Build Windows artifacts locally
 
@@ -147,8 +153,11 @@ The server reads:
 - Production dashboard: `http://127.0.0.1:4318/`
 - Production loop overlay: `http://127.0.0.1:4318/overlay/loop`
 - Production overall overlay: `http://127.0.0.1:4318/overlay/overall`
+- Production unearned trophies overlay: `http://127.0.0.1:4318/overlay/unearned-trophies`
 - Production current-game overlay: `http://127.0.0.1:4318/overlay/current-game`
 - Production target trophy overlay: `http://127.0.0.1:4318/overlay/target-trophy`
+- Production BRB overlay: `http://127.0.0.1:4318/overlay/brb`
+- Production camera border overlay: `http://127.0.0.1:4318/overlay/camera-border`
 
 ## Notes
 

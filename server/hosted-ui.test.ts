@@ -6,8 +6,11 @@ import request from "supertest";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  createDefaultBrbState,
   createDefaultActiveGameSelection,
+  createDefaultEarnedSessionCard,
   createDefaultOverlaySettings,
+  overlayRoutePaths,
   type HealthResponse,
   type OverlayDataResponse,
   type PsnTokenStatusResponse,
@@ -86,11 +89,18 @@ const createServiceStub = () => ({
   getActiveGame: () => createDefaultActiveGameSelection(),
   updateActiveGame: (activeGame: ReturnType<typeof createDefaultActiveGameSelection>) =>
     activeGame,
+  getBrbState: () => createDefaultBrbState(),
+  updateBrbState: () => createDefaultBrbState(),
+  getEarnedSessionState: () => createDefaultEarnedSessionCard(),
+  updateEarnedSessionState: () => createDefaultEarnedSessionCard(),
   updateTargetTrophy: () => null,
   getOverlayData: async (): Promise<OverlayDataResponse> => ({
     overall: null,
+    unearnedTrophies: null,
     currentGame: null,
     targetTrophy: null,
+    brb: createDefaultBrbState(),
+    earnedSession: createDefaultEarnedSessionCard(),
     display: {
       settings: createDefaultOverlaySettings(),
       loopOrder: ["overall", "currentGame"],
@@ -152,13 +162,17 @@ describe("hosted UI runtime", () => {
     expect(attached).toBe(true);
 
     const dashboardResponse = await request(app).get("/");
-    const overlayResponse = await request(app).get("/overlay/current-game");
+    const overlayResponses = await Promise.all(
+      Object.values(overlayRoutePaths).map((route) => request(app).get(route)),
+    );
     const imageResponse = await request(app).get("/img/40-gold.png");
 
     expect(dashboardResponse.status).toBe(200);
     expect(dashboardResponse.text).toContain("Control Room");
-    expect(overlayResponse.status).toBe(200);
-    expect(overlayResponse.text).toContain("Control Room");
+    overlayResponses.forEach((response) => {
+      expect(response.status).toBe(200);
+      expect(response.text).toContain("Control Room");
+    });
     expect(imageResponse.status).toBe(200);
     expect(Buffer.from(imageResponse.body).toString("utf8")).toBe("gold");
   });

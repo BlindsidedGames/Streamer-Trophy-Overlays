@@ -2,9 +2,106 @@ import { createServer } from "node:http";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import {
+  createDefaultBrbState,
+  createDefaultActiveGameSelection,
+  createDefaultEarnedSessionCard,
+  createDefaultOverlaySettings,
+} from "../shared/contracts.js";
 import { startServerRuntime } from "./runtime.js";
 
 const runtimes: Array<Awaited<ReturnType<typeof startServerRuntime>>> = [];
+
+const createRuntimeServiceStub = () => {
+  const settings = {
+    ...createDefaultOverlaySettings(),
+    currentGameDurationMs: 5000,
+    updatedAt: "2026-03-18T00:00:00Z",
+  };
+  const activeGame = {
+    ...createDefaultActiveGameSelection(),
+    customGameId: "custom",
+    updatedAt: "2026-03-18T00:00:00Z",
+    override: {
+      ...createDefaultActiveGameSelection().override,
+      updatedAt: "2026-03-18T00:00:00Z",
+    },
+  };
+
+  return {
+    getHealth: () => ({ status: "ok", configured: false, source: "psn-api" as const }),
+    getPsnTokenStatus: () => ({ configured: false, storage: "local-file" as const, updatedAt: null }),
+    savePsnToken: () => ({ configured: true, storage: "local-file" as const, updatedAt: null }),
+    clearPsnToken: () => ({ configured: false, storage: "local-file" as const, updatedAt: null }),
+    getSummary: async () => ({
+      profile: null,
+      titles: [],
+      meta: {
+        fetchedAt: "2026-03-18T00:00:00Z",
+        cached: false,
+        warnings: [],
+        partial: false,
+        source: "psn-api" as const,
+      },
+    }),
+    searchTitles: async () => ({ results: [], nextOffset: null, totalItemCount: 0 }),
+    getTitleTrophies: async () => ({
+      title: null,
+      trophies: [],
+      target: null,
+      meta: {
+        fetchedAt: "2026-03-18T00:00:00Z",
+        cached: false,
+        warnings: [],
+        partial: false,
+      },
+    }),
+    getUnearnedTrophies: async () => ({
+      trophies: [],
+      meta: {
+        fetchedAt: "2026-03-18T00:00:00Z",
+        cached: false,
+        warnings: [],
+        partial: false,
+      },
+    }),
+    getSettings: () => settings,
+    updateSettings: (nextSettings: typeof settings) => nextSettings,
+    getActiveGame: () => activeGame,
+    updateActiveGame: (nextActiveGame: typeof activeGame) => nextActiveGame,
+    getBrbState: () => createDefaultBrbState(),
+    updateBrbState: () => createDefaultBrbState(),
+    getEarnedSessionState: () => createDefaultEarnedSessionCard(),
+    updateEarnedSessionState: () => createDefaultEarnedSessionCard(),
+    updateTargetTrophy: () => null,
+    getOverlayData: async () => ({
+      overall: null,
+      unearnedTrophies: null,
+      currentGame: null,
+      targetTrophy: null,
+      brb: {
+        status: "stopped" as const,
+        visible: false,
+        remainingMs: settings.brbDurationMs,
+        sessionDurationMs: settings.brbDurationMs,
+        endsAt: null,
+        updatedAt: "2026-03-18T00:00:00Z",
+      },
+      earnedSession: createDefaultEarnedSessionCard("2026-03-18T00:00:00Z"),
+      display: {
+        settings,
+        loopOrder: ["overall", "currentGame"] as const,
+        lastRefreshAt: "2026-03-18T00:00:00Z",
+      },
+      meta: {
+        fetchedAt: "2026-03-18T00:00:00Z",
+        cached: false,
+        warnings: [],
+        partial: false,
+      },
+    }),
+  };
+};
 
 afterEach(async () => {
   while (runtimes.length > 0) {
@@ -23,129 +120,7 @@ describe("server runtime", () => {
       port: 0,
       loadEnv: false,
       rootCandidates: [],
-      service: {
-        getHealth: () => ({ status: "ok", configured: false, source: "psn-api" as const }),
-        getPsnTokenStatus: () => ({ configured: false, storage: "local-file" as const, updatedAt: null }),
-        savePsnToken: () => ({ configured: true, storage: "local-file" as const, updatedAt: null }),
-        clearPsnToken: () => ({ configured: false, storage: "local-file" as const, updatedAt: null }),
-        getSummary: async () => ({
-          profile: null,
-          titles: [],
-          meta: {
-            fetchedAt: "2026-03-18T00:00:00Z",
-            cached: false,
-            warnings: [],
-            partial: false,
-            source: "psn-api" as const,
-          },
-        }),
-        searchTitles: async () => ({ results: [], nextOffset: null, totalItemCount: 0 }),
-        getTitleTrophies: async () => ({
-          title: null,
-          trophies: [],
-          target: null,
-          meta: {
-            fetchedAt: "2026-03-18T00:00:00Z",
-            cached: false,
-            warnings: [],
-            partial: false,
-          },
-        }),
-        getUnearnedTrophies: async () => ({
-          trophies: [],
-          meta: {
-            fetchedAt: "2026-03-18T00:00:00Z",
-            cached: false,
-            warnings: [],
-            partial: false,
-          },
-        }),
-        getSettings: () => ({
-          overallDurationMs: 5000,
-          currentGameDurationMs: 5000,
-          targetTrophyDurationMs: 12000,
-          showStripArtwork: true,
-          showStripIdentity: true,
-          showStripMetrics: true,
-          showStripTrophies: true,
-          stripZoneOrder: ["artwork", "identity", "metrics", "trophies", "targetInfo"],
-          showTargetTrophyInLoop: false,
-          overlayAnchors: {
-            loop: "bottom-left" as const,
-            targetTrophy: "bottom-left" as const,
-            overall: "bottom-left" as const,
-            currentGame: "bottom-left" as const,
-          },
-          showTargetTrophyInfo: true,
-          showTargetTrophyTag: true,
-          targetTrophyTagText: "Current Target",
-          updatedAt: "2026-03-18T00:00:00Z",
-        }),
-        updateSettings: (settings) => settings,
-        getActiveGame: () => ({
-          mode: "psn" as const,
-          selectedNpCommunicationId: null,
-          customGameId: "custom",
-          override: {
-            titleName: null,
-            iconUrl: null,
-            platform: null,
-            completionPercentage: null,
-            earnedCounts: {
-              platinum: null,
-              gold: null,
-              silver: null,
-              bronze: null,
-            },
-            definedCounts: {
-              platinum: null,
-              gold: null,
-              silver: null,
-              bronze: null,
-            },
-            updatedAt: "2026-03-18T00:00:00Z",
-          },
-          updatedAt: "2026-03-18T00:00:00Z",
-        }),
-        updateActiveGame: (activeGame) => activeGame,
-        updateTargetTrophy: () => null,
-        getOverlayData: async () => ({
-          overall: null,
-          currentGame: null,
-          targetTrophy: null,
-          display: {
-            settings: {
-              overallDurationMs: 5000,
-              currentGameDurationMs: 5000,
-              targetTrophyDurationMs: 12000,
-              showStripArtwork: true,
-              showStripIdentity: true,
-              showStripMetrics: true,
-              showStripTrophies: true,
-              stripZoneOrder: ["artwork", "identity", "metrics", "trophies", "targetInfo"],
-              showTargetTrophyInLoop: false,
-              overlayAnchors: {
-                loop: "bottom-left" as const,
-                targetTrophy: "bottom-left" as const,
-                overall: "bottom-left" as const,
-                currentGame: "bottom-left" as const,
-              },
-              showTargetTrophyInfo: true,
-              showTargetTrophyTag: true,
-              targetTrophyTagText: "Current Target",
-              updatedAt: "2026-03-18T00:00:00Z",
-            },
-            loopOrder: ["overall", "currentGame"] as const,
-            lastRefreshAt: "2026-03-18T00:00:00Z",
-          },
-          meta: {
-            fetchedAt: "2026-03-18T00:00:00Z",
-            cached: false,
-            warnings: [],
-            partial: false,
-          },
-        }),
-      },
+      service: createRuntimeServiceStub(),
     });
     runtimes.push(runtime);
 
@@ -177,129 +152,7 @@ describe("server runtime", () => {
         port,
         loadEnv: false,
         rootCandidates: [],
-        service: {
-          getHealth: () => ({ status: "ok", configured: false, source: "psn-api" as const }),
-          getPsnTokenStatus: () => ({ configured: false, storage: "local-file" as const, updatedAt: null }),
-          savePsnToken: () => ({ configured: true, storage: "local-file" as const, updatedAt: null }),
-          clearPsnToken: () => ({ configured: false, storage: "local-file" as const, updatedAt: null }),
-          getSummary: async () => ({
-            profile: null,
-            titles: [],
-            meta: {
-              fetchedAt: "2026-03-18T00:00:00Z",
-              cached: false,
-              warnings: [],
-              partial: false,
-              source: "psn-api" as const,
-            },
-          }),
-          searchTitles: async () => ({ results: [], nextOffset: null, totalItemCount: 0 }),
-          getTitleTrophies: async () => ({
-            title: null,
-            trophies: [],
-            target: null,
-            meta: {
-              fetchedAt: "2026-03-18T00:00:00Z",
-              cached: false,
-              warnings: [],
-              partial: false,
-            },
-          }),
-          getUnearnedTrophies: async () => ({
-            trophies: [],
-            meta: {
-              fetchedAt: "2026-03-18T00:00:00Z",
-              cached: false,
-              warnings: [],
-              partial: false,
-            },
-          }),
-          getSettings: () => ({
-            overallDurationMs: 5000,
-            currentGameDurationMs: 5000,
-            targetTrophyDurationMs: 12000,
-            showStripArtwork: true,
-            showStripIdentity: true,
-            showStripMetrics: true,
-            showStripTrophies: true,
-            stripZoneOrder: ["artwork", "identity", "metrics", "trophies", "targetInfo"],
-            showTargetTrophyInLoop: false,
-            overlayAnchors: {
-              loop: "bottom-left" as const,
-              targetTrophy: "bottom-left" as const,
-              overall: "bottom-left" as const,
-              currentGame: "bottom-left" as const,
-            },
-            showTargetTrophyInfo: true,
-            showTargetTrophyTag: true,
-            targetTrophyTagText: "Current Target",
-            updatedAt: "2026-03-18T00:00:00Z",
-          }),
-          updateSettings: (settings) => settings,
-          getActiveGame: () => ({
-            mode: "psn" as const,
-            selectedNpCommunicationId: null,
-            customGameId: "custom",
-            override: {
-              titleName: null,
-              iconUrl: null,
-              platform: null,
-              completionPercentage: null,
-              earnedCounts: {
-                platinum: null,
-                gold: null,
-                silver: null,
-                bronze: null,
-              },
-              definedCounts: {
-                platinum: null,
-                gold: null,
-                silver: null,
-                bronze: null,
-              },
-              updatedAt: "2026-03-18T00:00:00Z",
-            },
-            updatedAt: "2026-03-18T00:00:00Z",
-          }),
-          updateActiveGame: (activeGame) => activeGame,
-          updateTargetTrophy: () => null,
-          getOverlayData: async () => ({
-            overall: null,
-            currentGame: null,
-            targetTrophy: null,
-            display: {
-              settings: {
-                overallDurationMs: 5000,
-                currentGameDurationMs: 5000,
-                targetTrophyDurationMs: 12000,
-                showStripArtwork: true,
-                showStripIdentity: true,
-                showStripMetrics: true,
-                showStripTrophies: true,
-                stripZoneOrder: ["artwork", "identity", "metrics", "trophies", "targetInfo"],
-                showTargetTrophyInLoop: false,
-                overlayAnchors: {
-                  loop: "bottom-left" as const,
-                  targetTrophy: "bottom-left" as const,
-                  overall: "bottom-left" as const,
-                  currentGame: "bottom-left" as const,
-                },
-                showTargetTrophyInfo: true,
-                showTargetTrophyTag: true,
-                targetTrophyTagText: "Current Target",
-                updatedAt: "2026-03-18T00:00:00Z",
-              },
-              loopOrder: ["overall", "currentGame"] as const,
-              lastRefreshAt: "2026-03-18T00:00:00Z",
-            },
-            meta: {
-              fetchedAt: "2026-03-18T00:00:00Z",
-              cached: false,
-              warnings: [],
-              partial: false,
-            },
-          }),
-        },
+        service: createRuntimeServiceStub(),
       }),
     ).rejects.toMatchObject({ code: "EADDRINUSE" });
 

@@ -4,6 +4,8 @@ import express from "express";
 import type {
   ActiveGameSelection,
   OverlaySettings,
+  UpdateBrbRequest,
+  UpdateEarnedSessionRequest,
   UpdatePsnTokenRequest,
   UpdateTargetTrophyRequest,
 } from "../shared/contracts.js";
@@ -12,6 +14,13 @@ import {
   RealOverlaySuiteService,
   type OverlaySuiteService,
 } from "./overlay-suite-service.js";
+
+const fixedLoopOrder = [
+  "overall",
+  "unearnedTrophies",
+  "currentGame",
+  "targetTrophy",
+] as const;
 
 export const createApp = (
   service: OverlaySuiteService = new RealOverlaySuiteService(),
@@ -153,6 +162,26 @@ export const createApp = (
     }
   });
 
+  app.put("/api/brb", (request, response) => {
+    try {
+      const brbState = service.updateBrbState(request.body as UpdateBrbRequest);
+      response.json(brbState);
+    } catch (error) {
+      response.status(resolveErrorStatus(error)).json({ error: toApiErrorPayload(error) });
+    }
+  });
+
+  app.put("/api/earned-session", (request, response) => {
+    try {
+      const earnedSession = service.updateEarnedSessionState(
+        request.body as UpdateEarnedSessionRequest,
+      );
+      response.json(earnedSession);
+    } catch (error) {
+      response.status(resolveErrorStatus(error)).json({ error: toApiErrorPayload(error) });
+    }
+  });
+
   app.put("/api/target-trophy", (request, response) => {
     try {
       const targetTrophy = service.updateTargetTrophy(
@@ -171,15 +200,22 @@ export const createApp = (
     } catch (error) {
       const settings = service.getSettings();
       const targetTrophy = null;
+      const brb = service.getBrbState();
+      const earnedSession = service.getEarnedSessionState();
       response.status(500).json({
         overall: null,
+        unearnedTrophies: null,
         currentGame: null,
         targetTrophy,
+        brb,
+        earnedSession,
         display: {
           settings,
-          loopOrder: settings.showTargetTrophyInLoop && targetTrophy
-            ? ["overall", "currentGame", "targetTrophy"]
-            : ["overall", "currentGame"],
+          loopOrder: fixedLoopOrder.filter(
+            (view) =>
+              settings.loopVisibility[view] &&
+              (view !== "targetTrophy" || targetTrophy !== null),
+          ),
           lastRefreshAt: new Date().toISOString(),
         },
         meta: {

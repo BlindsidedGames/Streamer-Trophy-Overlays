@@ -2,7 +2,9 @@ import request from "supertest";
 import { describe, expect, it } from "vitest";
 
 import {
+  createDefaultBrbState,
   createDefaultActiveGameSelection,
+  createDefaultEarnedSessionCard,
   createDefaultOverlaySettings,
   type HealthResponse,
   type OverlayDataResponse,
@@ -82,6 +84,10 @@ describe("createApp", () => {
       updateSettings: (settings) => settings,
       getActiveGame: () => createDefaultActiveGameSelection(),
       updateActiveGame: (activeGame) => activeGame,
+      getBrbState: () => createDefaultBrbState(),
+      updateBrbState: () => createDefaultBrbState(),
+      getEarnedSessionState: () => createDefaultEarnedSessionCard(),
+      updateEarnedSessionState: () => createDefaultEarnedSessionCard(),
       updateTargetTrophy: () => null,
       getOverlayData: async (): Promise<OverlayDataResponse> => ({
         overall: {
@@ -98,8 +104,11 @@ describe("createApp", () => {
             total: 2848,
           },
         },
+        unearnedTrophies: null,
         currentGame: null,
         targetTrophy: null,
+        brb: createDefaultBrbState(),
+        earnedSession: createDefaultEarnedSessionCard(),
         display: {
           settings: createDefaultOverlaySettings(),
           loopOrder: ["overall", "currentGame"],
@@ -178,11 +187,18 @@ describe("createApp", () => {
       updateSettings: (settings) => settings,
       getActiveGame: () => createDefaultActiveGameSelection(),
       updateActiveGame: (activeGame) => activeGame,
+      getBrbState: () => createDefaultBrbState(),
+      updateBrbState: () => createDefaultBrbState(),
+      getEarnedSessionState: () => createDefaultEarnedSessionCard(),
+      updateEarnedSessionState: () => createDefaultEarnedSessionCard(),
       updateTargetTrophy: () => null,
       getOverlayData: async (): Promise<OverlayDataResponse> => ({
         overall: null,
+        unearnedTrophies: null,
         currentGame: null,
         targetTrophy: null,
+        brb: createDefaultBrbState(),
+        earnedSession: createDefaultEarnedSessionCard(),
         display: {
           settings: createDefaultOverlaySettings(),
           loopOrder: ["overall", "currentGame"],
@@ -208,12 +224,20 @@ describe("createApp", () => {
     const nextSettings = {
       ...createDefaultOverlaySettings(),
       overallDurationMs: 9000,
-      showStripArtwork: false,
+      stripVisibility: {
+        ...createDefaultOverlaySettings().stripVisibility,
+        overall: {
+          ...createDefaultOverlaySettings().stripVisibility.overall,
+          artwork: false,
+        },
+      },
       stripZoneOrder: ["metrics", "trophies", "identity", "artwork", "targetInfo"],
       overlayAnchors: {
         ...createDefaultOverlaySettings().overlayAnchors,
         targetTrophy: "top-right",
+        brb: "bottom-right",
       },
+      showTargetTrophyArtwork: false,
       showTargetTrophyInfo: false,
       showTargetTrophyTag: false,
       targetTrophyTagText: "Featured Trophy",
@@ -248,11 +272,18 @@ describe("createApp", () => {
       updateSettings: (settings) => settings,
       getActiveGame: () => createDefaultActiveGameSelection(),
       updateActiveGame: (activeGame) => activeGame,
+      getBrbState: () => createDefaultBrbState(),
+      updateBrbState: () => createDefaultBrbState(),
+      getEarnedSessionState: () => createDefaultEarnedSessionCard(),
+      updateEarnedSessionState: () => createDefaultEarnedSessionCard(),
       updateTargetTrophy: () => null,
       getOverlayData: async (): Promise<OverlayDataResponse> => ({
         overall: null,
+        unearnedTrophies: null,
         currentGame: null,
         targetTrophy: null,
+        brb: createDefaultBrbState(),
+        earnedSession: createDefaultEarnedSessionCard(),
         display: {
           settings: createDefaultOverlaySettings(),
           loopOrder: ["overall", "currentGame"],
@@ -271,7 +302,7 @@ describe("createApp", () => {
 
     expect(response.status).toBe(200);
     expect(response.body.overallDurationMs).toBe(9000);
-    expect(response.body.showStripArtwork).toBe(false);
+    expect(response.body.stripVisibility.overall.artwork).toBe(false);
     expect(response.body.stripZoneOrder).toEqual([
       "metrics",
       "trophies",
@@ -281,15 +312,180 @@ describe("createApp", () => {
     ]);
     expect(response.body.overlayAnchors.targetTrophy).toBe("top-right");
     expect(response.body.overlayAnchors.loop).toBe("bottom-left");
+    expect(response.body.overlayAnchors.brb).toBe("bottom-right");
+    expect(response.body.showTargetTrophyArtwork).toBe(false);
     expect(response.body.showTargetTrophyInfo).toBe(false);
     expect(response.body.showTargetTrophyTag).toBe(false);
     expect(response.body.targetTrophyTagText).toBe("Featured Trophy");
   });
 
+  it("updates BRB runtime state through the dedicated route", async () => {
+    let receivedRequest: unknown = null;
+
+    const app = createApp({
+      getHealth: (): HealthResponse => ({
+        status: "ok",
+        configured: true,
+        source: "psn-api",
+      }),
+      getPsnTokenStatus: () => createPsnTokenStatusResponse(),
+      savePsnToken: () => createPsnTokenStatusResponse(),
+      clearPsnToken: () => createPsnTokenStatusResponse(false),
+      getSummary: async (): Promise<TrophySummaryResponse> => ({
+        profile: null,
+        titles: [],
+        meta: {
+          fetchedAt: "2026-03-17T00:00:00Z",
+          cached: false,
+          warnings: [],
+          partial: false,
+          source: "psn-api",
+        },
+      }),
+      searchTitles: async (): Promise<TitleSearchResponse> => createTitleSearchResponse(),
+      getTitleTrophies: async (): Promise<TitleTrophiesResponse> =>
+        createTitleTrophiesResponse(),
+      getUnearnedTrophies: async (): Promise<UnearnedTrophiesResponse> =>
+        createUnearnedTrophiesResponse(),
+      getSettings: () => createDefaultOverlaySettings(),
+      updateSettings: (settings) => settings,
+      getActiveGame: () => createDefaultActiveGameSelection(),
+      updateActiveGame: (activeGame) => activeGame,
+      getBrbState: () => createDefaultBrbState(),
+      getEarnedSessionState: () => createDefaultEarnedSessionCard(),
+      updateBrbState: (request) => {
+        receivedRequest = request;
+        return {
+          status: "running",
+          visible: true,
+          remainingMs: 120000,
+          sessionDurationMs: 120000,
+          endsAt: "2026-03-17T00:02:00Z",
+          updatedAt: "2026-03-17T00:00:00Z",
+        };
+      },
+      updateEarnedSessionState: () => createDefaultEarnedSessionCard(),
+      updateTargetTrophy: () => null,
+      getOverlayData: async (): Promise<OverlayDataResponse> => ({
+        overall: null,
+        unearnedTrophies: null,
+        currentGame: null,
+        targetTrophy: null,
+        brb: createDefaultBrbState(),
+        earnedSession: createDefaultEarnedSessionCard(),
+        display: {
+          settings: createDefaultOverlaySettings(),
+          loopOrder: ["overall", "currentGame"],
+          lastRefreshAt: "2026-03-17T00:00:00Z",
+        },
+        meta: {
+          fetchedAt: "2026-03-17T00:00:00Z",
+          cached: false,
+          warnings: [],
+          partial: false,
+        },
+      }),
+    });
+
+    const response = await request(app).put("/api/brb").send({ action: "start" });
+
+    expect(response.status).toBe(200);
+    expect(receivedRequest).toEqual({ action: "start" });
+    expect(response.body.status).toBe("running");
+    expect(response.body.visible).toBe(true);
+    expect(response.body.remainingMs).toBe(120000);
+  });
+
+  it("updates earned session runtime state through the dedicated route", async () => {
+    let receivedRequest: unknown = null;
+
+    const app = createApp({
+      getHealth: (): HealthResponse => ({
+        status: "ok",
+        configured: true,
+        source: "psn-api",
+      }),
+      getPsnTokenStatus: () => createPsnTokenStatusResponse(),
+      savePsnToken: () => createPsnTokenStatusResponse(),
+      clearPsnToken: () => createPsnTokenStatusResponse(false),
+      getSummary: async (): Promise<TrophySummaryResponse> => ({
+        profile: null,
+        titles: [],
+        meta: {
+          fetchedAt: "2026-03-17T00:00:00Z",
+          cached: false,
+          warnings: [],
+          partial: false,
+          source: "psn-api",
+        },
+      }),
+      searchTitles: async (): Promise<TitleSearchResponse> => createTitleSearchResponse(),
+      getTitleTrophies: async (): Promise<TitleTrophiesResponse> =>
+        createTitleTrophiesResponse(),
+      getUnearnedTrophies: async (): Promise<UnearnedTrophiesResponse> =>
+        createUnearnedTrophiesResponse(),
+      getSettings: () => createDefaultOverlaySettings(),
+      updateSettings: (settings) => settings,
+      getActiveGame: () => createDefaultActiveGameSelection(),
+      updateActiveGame: (activeGame) => activeGame,
+      getBrbState: () => createDefaultBrbState(),
+      updateBrbState: () => createDefaultBrbState(),
+      getEarnedSessionState: () => createDefaultEarnedSessionCard(),
+      updateEarnedSessionState: (request) => {
+        receivedRequest = request;
+        return {
+          visible: false,
+          sessionStartedAt: "2026-03-17T00:00:00Z",
+          counts: {
+            platinum: 0,
+            gold: 1,
+            silver: 0,
+            bronze: 0,
+            total: 1,
+          },
+          totalEarnedCount: 1,
+          updatedAt: "2026-03-17T00:05:00Z",
+        };
+      },
+      updateTargetTrophy: () => null,
+      getOverlayData: async (): Promise<OverlayDataResponse> => ({
+        overall: null,
+        unearnedTrophies: null,
+        currentGame: null,
+        targetTrophy: null,
+        brb: createDefaultBrbState(),
+        earnedSession: createDefaultEarnedSessionCard(),
+        display: {
+          settings: createDefaultOverlaySettings(),
+          loopOrder: ["overall", "currentGame"],
+          lastRefreshAt: "2026-03-17T00:00:00Z",
+        },
+        meta: {
+          fetchedAt: "2026-03-17T00:00:00Z",
+          cached: false,
+          warnings: [],
+          partial: false,
+        },
+      }),
+    });
+
+    const response = await request(app)
+      .put("/api/earned-session")
+      .send({ action: "increment", grade: "gold" });
+
+    expect(response.status).toBe(200);
+    expect(receivedRequest).toEqual({ action: "increment", grade: "gold" });
+    expect(response.body.counts.gold).toBe(1);
+    expect(response.body.totalEarnedCount).toBe(1);
+  });
+
   it("omits target trophy from fallback loop order when overlay data fails", async () => {
     const failingSettings = {
       ...createDefaultOverlaySettings(),
-      showTargetTrophyInLoop: true,
+      loopVisibility: {
+        ...createDefaultOverlaySettings().loopVisibility,
+        targetTrophy: true,
+      },
     };
 
     const app = createApp({
@@ -321,6 +517,10 @@ describe("createApp", () => {
       updateSettings: (settings) => settings,
       getActiveGame: () => createDefaultActiveGameSelection(),
       updateActiveGame: (activeGame) => activeGame,
+      getBrbState: () => createDefaultBrbState(),
+      updateBrbState: () => createDefaultBrbState(),
+      getEarnedSessionState: () => createDefaultEarnedSessionCard(),
+      updateEarnedSessionState: () => createDefaultEarnedSessionCard(),
       updateTargetTrophy: () => null,
       getOverlayData: async (): Promise<OverlayDataResponse> => {
         throw new Error("overlay unavailable");
@@ -372,11 +572,18 @@ describe("createApp", () => {
       updateSettings: (settings) => settings,
       getActiveGame: () => createDefaultActiveGameSelection(),
       updateActiveGame: (activeGame) => activeGame,
+      getBrbState: () => createDefaultBrbState(),
+      updateBrbState: () => createDefaultBrbState(),
+      getEarnedSessionState: () => createDefaultEarnedSessionCard(),
+      updateEarnedSessionState: () => createDefaultEarnedSessionCard(),
       updateTargetTrophy: () => null,
       getOverlayData: async (): Promise<OverlayDataResponse> => ({
         overall: null,
+        unearnedTrophies: null,
         currentGame: null,
         targetTrophy: null,
+        brb: createDefaultBrbState(),
+        earnedSession: createDefaultEarnedSessionCard(),
         display: {
           settings: createDefaultOverlaySettings(),
           loopOrder: ["overall", "currentGame"],
@@ -443,11 +650,18 @@ describe("createApp", () => {
       updateSettings: (settings) => settings,
       getActiveGame: () => createDefaultActiveGameSelection(),
       updateActiveGame: (activeGame) => activeGame,
+      getBrbState: () => createDefaultBrbState(),
+      updateBrbState: () => createDefaultBrbState(),
+      getEarnedSessionState: () => createDefaultEarnedSessionCard(),
+      updateEarnedSessionState: () => createDefaultEarnedSessionCard(),
       updateTargetTrophy: () => null,
       getOverlayData: async (): Promise<OverlayDataResponse> => ({
         overall: null,
+        unearnedTrophies: null,
         currentGame: null,
         targetTrophy: null,
+        brb: createDefaultBrbState(),
+        earnedSession: createDefaultEarnedSessionCard(),
         display: {
           settings: createDefaultOverlaySettings(),
           loopOrder: ["overall", "currentGame"],

@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
   PsnTokenStatusResponse,
@@ -186,6 +186,24 @@ describe("RealOverlaySuiteService", () => {
     store.close();
   });
 
+  it("keeps unearned completion percentages precise for overlay formatting", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "streamer-tools-overlay-"));
+    tempPaths.push(directory);
+    const store = new StateStore(join(directory, "app.sqlite"));
+    const service = new RealOverlaySuiteService(
+      createSummaryService(createSummary()),
+      store,
+    );
+
+    const overlay = await service.getOverlayData();
+
+    expect(overlay.unearnedTrophies?.completionPercentage).toBeCloseTo(
+      (2848 / 2849) * 100,
+      6,
+    );
+    store.close();
+  });
+
   it("supports custom-only active games", async () => {
     const directory = mkdtempSync(join(tmpdir(), "streamer-tools-overlay-"));
     tempPaths.push(directory);
@@ -264,7 +282,7 @@ describe("RealOverlaySuiteService", () => {
     tempPaths.push(directory);
     const store = new StateStore(join(directory, "app.sqlite"));
     const settings = store.getSettings();
-    settings.showTargetTrophyInLoop = true;
+    settings.loopVisibility.targetTrophy = true;
     store.saveSettings(settings);
 
     const activeGame = store.getActiveGame();
@@ -313,12 +331,255 @@ describe("RealOverlaySuiteService", () => {
     store.close();
   });
 
+  it("includes normalized BRB runtime state in overlay data", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "streamer-tools-overlay-"));
+    tempPaths.push(directory);
+    const store = new StateStore(join(directory, "app.sqlite"));
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-17T00:00:00Z"));
+
+    try {
+      store.updateBrbState({ action: "start" });
+
+      const service = new RealOverlaySuiteService(
+        createSummaryService(createSummary()),
+        store,
+      );
+
+      vi.setSystemTime(new Date("2026-03-17T00:05:01Z"));
+      const overlay = await service.getOverlayData();
+
+      expect(overlay.brb.status).toBe("expired");
+      expect(overlay.brb.visible).toBe(true);
+      expect(overlay.brb.remainingMs).toBe(0);
+      expect(overlay.brb.endsAt).toBeNull();
+    } finally {
+      vi.useRealTimers();
+      store.close();
+    }
+  });
+
+  it("tracks earned session trophies across refreshes and preserves manual increments", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "streamer-tools-overlay-"));
+    tempPaths.push(directory);
+    let store: StateStore | null = null;
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-17T00:00:00Z"));
+
+    try {
+      store = new StateStore(join(directory, "app.sqlite"));
+      store.updateEarnedSessionState({ action: "increment", grade: "gold" });
+
+      const summaryState = createSummary();
+      summaryState.titles = [
+        {
+          titleId: "NPWR1",
+          npCommunicationId: "NPWR1",
+          npServiceName: "trophy2",
+          titleName: "Bluey",
+          platform: "PS5",
+          iconUrl: "https://example.com/bluey.png",
+          progress: 100,
+          earnedCounts: {
+            platinum: 0,
+            gold: 1,
+            silver: 0,
+            bronze: 1,
+            total: 2,
+          },
+          definedCounts: {
+            platinum: 1,
+            gold: 8,
+            silver: 8,
+            bronze: 6,
+            total: 23,
+          },
+          earnedTotal: 2,
+          definedTotal: 23,
+          lastUpdated: "2026-03-17T00:10:00Z",
+          hasTrophyGroups: false,
+        },
+        {
+          titleId: "NPWR2",
+          npCommunicationId: "NPWR2",
+          npServiceName: "trophy2",
+          titleName: "Astro Bot",
+          platform: "PS5",
+          iconUrl: "https://example.com/astro.png",
+          progress: 45,
+          earnedCounts: {
+            platinum: 0,
+            gold: 0,
+            silver: 0,
+            bronze: 1,
+            total: 1,
+          },
+          definedCounts: {
+            platinum: 1,
+            gold: 4,
+            silver: 6,
+            bronze: 18,
+            total: 29,
+          },
+          earnedTotal: 1,
+          definedTotal: 29,
+          lastUpdated: "2026-03-17T00:12:00Z",
+          hasTrophyGroups: false,
+        },
+      ];
+
+      const trophiesByTitle = {
+        NPWR1: [
+          {
+            npCommunicationId: "NPWR1",
+            trophyId: 1,
+            trophyGroupId: "default",
+            name: "Keepy Uppy",
+            description: "Win the balloon game.",
+            iconUrl: "https://example.com/gold.png",
+            grade: "gold" as const,
+            earned: true,
+            earnedAt: "2026-03-17T00:05:00Z",
+            hidden: false,
+            groupName: null,
+          },
+          {
+            npCommunicationId: "NPWR1",
+            trophyId: 2,
+            trophyGroupId: "default",
+            name: "Shadowlands",
+            description: "Finish a full round.",
+            iconUrl: "https://example.com/silver.png",
+            grade: "silver" as const,
+            earned: true,
+            earnedAt: null,
+            hidden: false,
+            groupName: null,
+          },
+          {
+            npCommunicationId: "NPWR1",
+            trophyId: 3,
+            trophyGroupId: "default",
+            name: "Muffin Cupcake",
+            description: "Chaos managed.",
+            iconUrl: "https://example.com/bronze.png",
+            grade: "bronze" as const,
+            earned: true,
+            earnedAt: "2026-03-16T23:55:00Z",
+            hidden: false,
+            groupName: null,
+          },
+        ],
+        NPWR2: [
+          {
+            npCommunicationId: "NPWR2",
+            trophyId: 9,
+            trophyGroupId: "default",
+            name: "Dust Bunny",
+            description: "Sweep the room.",
+            iconUrl: "https://example.com/bronze.png",
+            grade: "bronze" as const,
+            earned: true,
+            earnedAt: "2026-03-17T00:07:00Z",
+            hidden: false,
+            groupName: null,
+          },
+        ],
+      };
+
+      const getTitleTrophies = vi.fn(async (npCommunicationId: string) => ({
+        title:
+          summaryState.titles.find((title) => title.npCommunicationId === npCommunicationId) ?? null,
+        trophies:
+          trophiesByTitle[npCommunicationId as keyof typeof trophiesByTitle] ?? [],
+        meta: {
+          fetchedAt: "2026-03-17T00:00:00Z",
+          cached: false,
+          warnings: [],
+          partial: false,
+        },
+      }));
+
+      const service = new RealOverlaySuiteService(
+        {
+          ...createSummaryService(summaryState),
+          getSummary: async () => summaryState,
+          getTitleTrophies,
+        },
+        store,
+      );
+
+      const firstOverlay = await service.getOverlayData();
+
+      expect(firstOverlay.earnedSession.counts).toEqual({
+        platinum: 0,
+        gold: 2,
+        silver: 0,
+        bronze: 1,
+        total: 3,
+      });
+      expect(getTitleTrophies).toHaveBeenCalledTimes(2);
+
+      const secondOverlay = await service.getOverlayData();
+
+      expect(secondOverlay.earnedSession.counts).toEqual(firstOverlay.earnedSession.counts);
+      expect(getTitleTrophies).toHaveBeenCalledTimes(2);
+
+      summaryState.titles = summaryState.titles.map((title) =>
+        title.npCommunicationId === "NPWR1"
+          ? {
+              ...title,
+              earnedCounts: {
+                ...title.earnedCounts,
+                platinum: 1,
+                total: title.earnedCounts.total + 1,
+              },
+              earnedTotal: title.earnedTotal + 1,
+              lastUpdated: "2026-03-17T00:30:00Z",
+            }
+          : title,
+      );
+      trophiesByTitle.NPWR1 = [
+        ...trophiesByTitle.NPWR1,
+        {
+          npCommunicationId: "NPWR1",
+          trophyId: 4,
+          trophyGroupId: "default",
+          name: "Best in Show",
+          description: "Earn every trophy in Bluey.",
+          iconUrl: "https://example.com/platinum.png",
+          grade: "platinum" as const,
+          earned: true,
+          earnedAt: "2026-03-17T00:25:00Z",
+          hidden: false,
+          groupName: null,
+        },
+      ];
+
+      const thirdOverlay = await service.getOverlayData();
+
+      expect(getTitleTrophies).toHaveBeenCalledTimes(3);
+      expect(thirdOverlay.earnedSession.counts).toEqual({
+        platinum: 1,
+        gold: 2,
+        silver: 0,
+        bronze: 1,
+        total: 4,
+      });
+    } finally {
+      vi.useRealTimers();
+      store?.close();
+    }
+  });
+
   it("omits the target trophy from loop order when enabled but no target exists", async () => {
     const directory = mkdtempSync(join(tmpdir(), "streamer-tools-overlay-"));
     tempPaths.push(directory);
     const store = new StateStore(join(directory, "app.sqlite"));
     const settings = store.getSettings();
-    settings.showTargetTrophyInLoop = true;
+    settings.loopVisibility.targetTrophy = true;
     store.saveSettings(settings);
 
     const activeGame = store.getActiveGame();
